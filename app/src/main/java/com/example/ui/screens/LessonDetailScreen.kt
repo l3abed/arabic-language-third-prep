@@ -20,6 +20,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.outlined.VolumeUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -47,9 +49,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.model.CardItem
+import com.example.model.ExampleEntry
+import com.example.model.IrabStep
+import com.example.model.KeyValuePair
 import com.example.ui.theme.AmiriFontFamily
+import com.example.ui.theme.BorderLight
 import com.example.ui.theme.ExampleCardBgLight
 import com.example.ui.theme.GoldAccent
+import com.example.ui.theme.GoldLight
 import com.example.ui.theme.NoteCardBgLight
 import com.example.ui.theme.NoteCardBorderLight
 import com.example.ui.theme.PrimaryDarkTeal
@@ -106,7 +114,7 @@ fun LessonDetailScreen(
         ) {
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Top Bar matching Screenshot 1
+            // Top Bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -126,8 +134,7 @@ fun LessonDetailScreen(
                 ) {
                     IconButton(
                         onClick = {
-                            val speechContent = "${card.rule}. ${card.exampleTitle}: ${card.exampleText}. ${card.noteText}"
-                            viewModel.speakText(speechContent)
+                            viewModel.speakCard(card)
                         }
                     ) {
                         Icon(
@@ -145,7 +152,10 @@ fun LessonDetailScreen(
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground,
-                    fontSize = 20.sp
+                    fontSize = 18.sp,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
+                    textAlign = TextAlign.Center
                 )
 
                 // Back Arrow Button (in RTL pointing right)
@@ -164,12 +174,12 @@ fun LessonDetailScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Segmented Progress Bar matching Screenshot 1
+            // Segmented Progress Bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 for (i in 0 until totalCards) {
                     val isPastOrCurrent = i <= currentCardIndex
@@ -183,159 +193,24 @@ fun LessonDetailScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // Scrollable Content
+            // Scrollable Content dynamically rendered by Card Type
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Main White Card: القاعدة + المثال
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("main_lesson_card"),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp)
-                    ) {
-                        // Badge "القاعدة" in gold
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(GoldAccent)
-                                    .padding(horizontal = 14.dp, vertical = 6.dp)
-                            ) {
-                                Text(
-                                    text = card.badge,
-                                    color = PrimaryDarkTeal,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        // Rule text
-                        Text(
-                            text = TextHelper.formatArabic(card.rule, settings.showTashkeel),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = (18 * settings.fontScale).sp,
-                            lineHeight = (28 * settings.fontScale).sp
-                        )
-
-                        Spacer(modifier = Modifier.height(20.dp))
-
-                        // Example Subcard (#E8F0EE)
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = ExampleCardBgLight
-                            ),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(18.dp)
-                            ) {
-                                Text(
-                                    text = card.exampleTitle,
-                                    color = TextSecondaryLight,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    textAlign = TextAlign.End
-                                )
-
-                                Spacer(modifier = Modifier.height(8.dp))
-
-                                // Example large text in Amiri
-                                Text(
-                                    text = TextHelper.formatArabic(card.exampleText, settings.showTashkeel),
-                                    fontFamily = AmiriFontFamily,
-                                    fontSize = (26 * settings.fontScale).sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = PrimaryDarkTeal,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    textAlign = TextAlign.Center,
-                                    lineHeight = (36 * settings.fontScale).sp
-                                )
-
-                                if (card.exampleBreakdown.isNotEmpty()) {
-                                    Spacer(modifier = Modifier.height(10.dp))
-                                    Text(
-                                        text = TextHelper.formatArabic(card.exampleBreakdown, settings.showTashkeel),
-                                        fontSize = (13 * settings.fontScale).sp,
-                                        color = TextSecondaryLight,
-                                        lineHeight = (20 * settings.fontScale).sp,
-                                        modifier = Modifier.fillMaxWidth(),
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Note Card: "احفظ هذا" in Light Gold (#FEF8EC)
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("note_card"),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = NoteCardBgLight
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(18.dp)
-                    ) {
-                        Text(
-                            text = card.noteTitle,
-                            color = PrimaryDarkTeal,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.End
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Text(
-                            text = TextHelper.formatArabic(card.noteText, settings.showTashkeel),
-                            fontFamily = AmiriFontFamily,
-                            fontSize = (18 * settings.fontScale).sp,
-                            color = PrimaryDarkTeal,
-                            fontWeight = FontWeight.Medium,
-                            lineHeight = (28 * settings.fontScale).sp
-                        )
-                    }
-                }
-
+                RenderCardContent(
+                    card = card,
+                    fontScale = settings.fontScale,
+                    showTashkeel = settings.showTashkeel
+                )
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // Bottom Buttons Bar matching Screenshot 1
+            // Bottom Buttons Bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -367,7 +242,7 @@ fun LessonDetailScreen(
                     )
                 }
 
-                // "تدرّب الآن" Button (Dark Teal filled)
+                // "تدرّب الآن" Button (Dark Teal filled) - launches exercises for this lesson!
                 Button(
                     onClick = {
                         viewModel.openExercise(lesson.id)
@@ -390,5 +265,423 @@ fun LessonDetailScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun RenderCardContent(
+    card: CardItem,
+    fontScale: Float,
+    showTashkeel: Boolean
+) {
+    when (card) {
+        is CardItem.RuleCard -> {
+            BaseCardContainer(badge = "القاعدة", title = card.title) {
+                card.text?.let { t ->
+                    Text(
+                        text = TextHelper.formatArabic(t, showTashkeel),
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontSize = (17 * fontScale).sp,
+                        lineHeight = (26 * fontScale).sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+                }
+
+                card.points.forEach { point ->
+                    BulletPointRow(text = point, fontScale = fontScale, showTashkeel = showTashkeel)
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+        }
+
+        is CardItem.ExampleCard -> {
+            BaseCardContainer(badge = "أمثلة تطبيقية", title = card.title) {
+                card.items.forEach { item ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = ExampleCardBgLight)
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Text(
+                                text = TextHelper.formatArabic(item.text, showTashkeel),
+                                fontFamily = AmiriFontFamily,
+                                fontSize = (22 * fontScale).sp,
+                                fontWeight = FontWeight.Bold,
+                                color = PrimaryDarkTeal,
+                                lineHeight = (30 * fontScale).sp
+                            )
+                            if (item.note.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = TextHelper.formatArabic(item.note, showTashkeel),
+                                    fontSize = (13 * fontScale).sp,
+                                    color = TextSecondaryLight
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        is CardItem.IrabCard -> {
+            BaseCardContainer(badge = "نموذج إعرابي", title = "إعراب الشاهد") {
+                // Sentence highlight
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = ExampleCardBgLight)
+                ) {
+                    Text(
+                        text = TextHelper.formatArabic(card.sentence, showTashkeel),
+                        fontFamily = AmiriFontFamily,
+                        fontSize = (24 * fontScale).sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryDarkTeal,
+                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                        textAlign = TextAlign.Center
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Steps table
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    card.steps.forEach { step ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Text(
+                                text = TextHelper.formatArabic(step.word, showTashkeel),
+                                fontWeight = FontWeight.Bold,
+                                color = PrimaryDarkTeal,
+                                fontFamily = AmiriFontFamily,
+                                fontSize = (18 * fontScale).sp,
+                                modifier = Modifier.width(90.dp)
+                            )
+                            Text(
+                                text = TextHelper.formatArabic(step.irab, showTashkeel),
+                                fontSize = (14 * fontScale).sp,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+
+                card.tip?.let { tip ->
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = NoteCardBgLight)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Lightbulb,
+                                contentDescription = null,
+                                tint = GoldAccent,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = TextHelper.formatArabic(tip, showTashkeel),
+                                fontSize = (13 * fontScale).sp,
+                                color = PrimaryDarkTeal,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        is CardItem.FactsCard -> {
+            BaseCardContainer(badge = "معطيات وتحليل", title = card.title) {
+                card.items.forEach { item ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = TextHelper.formatArabic(item.label, showTashkeel),
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryDarkTeal,
+                            fontSize = (14 * fontScale).sp
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = TextHelper.formatArabic(item.value, showTashkeel),
+                            fontSize = (14 * fontScale).sp,
+                            lineHeight = (22 * fontScale).sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        }
+
+        is CardItem.VocabCard -> {
+            BaseCardContainer(badge = "شرح المفردات", title = card.title) {
+                card.items.forEach { item ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = TextHelper.formatArabic(item.label, showTashkeel),
+                            fontFamily = AmiriFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryDarkTeal,
+                            fontSize = (19 * fontScale).sp
+                        )
+                        Text(
+                            text = TextHelper.formatArabic(item.value, showTashkeel),
+                            fontSize = (14 * fontScale).sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        }
+
+        is CardItem.SummaryCard -> {
+            BaseCardContainer(badge = "خلاصة ومضمون", title = card.title) {
+                Text(
+                    text = TextHelper.formatArabic(card.text, showTashkeel),
+                    fontFamily = AmiriFontFamily,
+                    fontSize = (19 * fontScale).sp,
+                    lineHeight = (30 * fontScale).sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+
+        is CardItem.StepsCard -> {
+            BaseCardContainer(badge = "خطوات منهجية", title = card.title) {
+                card.points.forEachIndexed { index, step ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(PrimaryDarkTeal),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "${index + 1}",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = TextHelper.formatArabic(step, showTashkeel),
+                            fontSize = (15 * fontScale).sp,
+                            lineHeight = (22 * fontScale).sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        }
+
+        is CardItem.ModelCard -> {
+            BaseCardContainer(badge = "نموذج مُنجَز", title = card.title) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = ExampleCardBgLight)
+                ) {
+                    Text(
+                        text = TextHelper.formatArabic(card.text, showTashkeel),
+                        fontFamily = AmiriFontFamily,
+                        fontSize = (17 * fontScale).sp,
+                        lineHeight = (28 * fontScale).sp,
+                        color = PrimaryDarkTeal,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                }
+
+                if (card.points.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Text(
+                        text = "ملاحظات على النموذج:",
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryDarkTeal,
+                        fontSize = 14.sp
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    card.points.forEach { pt ->
+                        BulletPointRow(text = pt, fontScale = fontScale, showTashkeel = showTashkeel)
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
+                }
+            }
+        }
+
+        is CardItem.MemorizeCard -> {
+            // Distinctive Memorize Card with Gold border and tinted background
+            Card(
+                modifier = Modifier.fillMaxWidth().testTag("memorize_card"),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = NoteCardBgLight),
+                border = androidx.compose.foundation.BorderStroke(1.dp, NoteCardBorderLight)
+            ) {
+                Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = card.title,
+                            fontFamily = AmiriFontFamily,
+                            fontSize = (22 * fontScale).sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryDarkTeal
+                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(GoldAccent)
+                                .padding(horizontal = 12.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "احفظ هذا",
+                                color = PrimaryDarkTeal,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    card.points.forEach { pt ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .padding(top = 6.dp)
+                                    .size(7.dp)
+                                    .clip(CircleShape)
+                                    .background(PrimaryDarkTeal)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = TextHelper.formatArabic(pt, showTashkeel),
+                                fontFamily = AmiriFontFamily,
+                                fontSize = (18 * fontScale).sp,
+                                lineHeight = (28 * fontScale).sp,
+                                color = PrimaryDarkTeal,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BaseCardContainer(
+    badge: String,
+    title: String,
+    content: @Composable () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth().testTag("lesson_card_container"),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
+            // Header Row: Title & Badge
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 18.sp,
+                    modifier = Modifier.weight(1f)
+                )
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(GoldLight)
+                        .padding(horizontal = 12.dp, vertical = 5.dp)
+                ) {
+                    Text(
+                        text = badge,
+                        color = PrimaryDarkTeal,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            content()
+        }
+    }
+}
+
+@Composable
+private fun BulletPointRow(
+    text: String,
+    fontScale: Float,
+    showTashkeel: Boolean
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top
+    ) {
+        Box(
+            modifier = Modifier
+                .padding(top = 8.dp)
+                .size(6.dp)
+                .clip(CircleShape)
+                .background(GoldAccent)
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(
+            text = TextHelper.formatArabic(text, showTashkeel),
+            fontSize = (15 * fontScale).sp,
+            lineHeight = (24 * fontScale).sp,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }

@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.LessonRepository
 import com.example.data.UserSettings
+import com.example.model.CardItem
 import com.example.model.ComponentInfo
 import com.example.model.Lesson
 import com.example.util.ArabicAudioPlayer
@@ -59,12 +60,12 @@ class ArabicAppViewModel(application: Application) : AndroidViewModel(applicatio
         repository.getComponentInfos()
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val lastStudiedLesson: StateFlow<Lesson?> = combine(
+    val resumeLesson: StateFlow<Lesson?> = combine(
         lessons,
+        completedLessons,
         _activeLessonId
-    ) { allLessons, _ ->
-        val lastId = repository.getLastStudiedLessonId()
-        allLessons.firstOrNull { it.id == lastId } ?: allLessons.firstOrNull()
+    ) { _, _, _ ->
+        repository.getResumeLesson()
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     fun selectTab(tab: NavTab) {
@@ -117,6 +118,50 @@ class ArabicAppViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun resetAllProgress() {
         repository.resetProgress()
+    }
+
+    fun speakCard(card: CardItem) {
+        val speechBuilder = StringBuilder()
+        when (card) {
+            is CardItem.RuleCard -> {
+                speechBuilder.append(card.title).append(". ")
+                card.text?.let { speechBuilder.append(it).append(". ") }
+                card.points.forEach { speechBuilder.append(it).append(". ") }
+            }
+            is CardItem.ExampleCard -> {
+                speechBuilder.append(card.title).append(". ")
+                card.items.forEach { speechBuilder.append(it.text).append(". ").append(it.note).append(". ") }
+            }
+            is CardItem.IrabCard -> {
+                speechBuilder.append(card.sentence).append(". ")
+                card.steps.forEach { speechBuilder.append(it.word).append(": ").append(it.irab).append(". ") }
+                card.tip?.let { speechBuilder.append(it).append(". ") }
+            }
+            is CardItem.FactsCard -> {
+                speechBuilder.append(card.title).append(". ")
+                card.items.forEach { speechBuilder.append(it.label).append(": ").append(it.value).append(". ") }
+            }
+            is CardItem.VocabCard -> {
+                speechBuilder.append(card.title).append(". ")
+                card.items.forEach { speechBuilder.append(it.label).append(": ").append(it.value).append(". ") }
+            }
+            is CardItem.SummaryCard -> {
+                speechBuilder.append(card.title).append(". ").append(card.text)
+            }
+            is CardItem.StepsCard -> {
+                speechBuilder.append(card.title).append(". ")
+                card.points.forEachIndexed { i, p -> speechBuilder.append("${i + 1}: ").append(p).append(". ") }
+            }
+            is CardItem.ModelCard -> {
+                speechBuilder.append(card.title).append(". ").append(card.text).append(". ")
+                card.points.forEach { speechBuilder.append(it).append(". ") }
+            }
+            is CardItem.MemorizeCard -> {
+                speechBuilder.append(card.title).append(". ")
+                card.points.forEach { speechBuilder.append(it).append(". ") }
+            }
+        }
+        audioPlayer.speak(speechBuilder.toString(), settings.value.speechRate)
     }
 
     fun speakText(text: String) {

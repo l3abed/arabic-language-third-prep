@@ -2,11 +2,13 @@ package com.example.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.example.model.CardItem
 import com.example.model.ComponentInfo
-import com.example.model.Exercise
-import com.example.model.ExerciseType
+import com.example.model.ExampleEntry
+import com.example.model.ExerciseItem
+import com.example.model.IrabStep
+import com.example.model.KeyValuePair
 import com.example.model.Lesson
-import com.example.model.LessonCard
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,9 +37,39 @@ class LessonRepository(private val context: Context) {
     val settings: StateFlow<UserSettings> = _settings.asStateFlow()
 
     init {
+        cleanDeprecatedData()
         loadSettings()
         loadCompletedLessons()
         loadLessons()
+    }
+
+    private fun cleanDeprecatedData() {
+        val editor = prefs.edit()
+
+        // 1) Remove shart_lesson from completed lessons set
+        val currentCompleted = prefs.getStringSet("completed_lessons_set", emptySet())
+        if (currentCompleted != null && currentCompleted.contains("shart_lesson")) {
+            val updated = currentCompleted.toMutableSet().apply { remove("shart_lesson") }
+            editor.putStringSet("completed_lessons_set", updated)
+        }
+
+        // 2) Remove shart_lesson from last_studied_lesson_id
+        val lastStudied = prefs.getString("last_studied_lesson_id", null)
+        if (lastStudied == "shart_lesson") {
+            editor.remove("last_studied_lesson_id")
+        }
+
+        // 3) Remove any preference keys belonging to shart_lesson
+        editor.remove("lesson_step_shart_lesson")
+        editor.remove("score_shart_lesson_val")
+        editor.remove("score_shart_lesson_total")
+        editor.apply()
+
+        // 4) Delete outdated custom_lessons.json if it exists so app strictly loads new lessons.json
+        val customFile = File(context.filesDir, "custom_lessons.json")
+        if (customFile.exists()) {
+            customFile.delete()
+        }
     }
 
     private fun loadSettings() {
@@ -60,36 +92,65 @@ class LessonRepository(private val context: Context) {
 
     private fun loadCompletedLessons() {
         val set = prefs.getStringSet("completed_lessons_set", emptySet()) ?: emptySet()
-        _completedLessons.value = set
+        // Ensure no deprecated IDs in memory
+        _completedLessons.value = set.filter { it != "shart_lesson" }.toSet()
     }
 
     fun markLessonCompleted(lessonId: String) {
+        if (lessonId == "shart_lesson") return
         val updated = _completedLessons.value.toMutableSet().apply { add(lessonId) }
         _completedLessons.value = updated
         prefs.edit().putStringSet("completed_lessons_set", updated).apply()
     }
 
-    fun getLastStudiedLessonId(): String {
-        val saved = prefs.getString("last_studied_lesson_id", null)
-        if (!saved.isNullOrEmpty() && _lessons.value.any { it.id == saved }) {
-            return saved
+    /**
+     * Resume lesson logic:
+     * - Returns the previously studied lesson if unfinished.
+     * - Otherwise returns the first uncompleted lesson from the new lessons.
+     * - If all completed, returns the first lesson.
+     */
+    fun getResumeLesson(): Lesson? {
+        val allLessons = _lessons.value
+        if (allLessons.isEmpty()) return null
+
+        val completed = _completedLessons.value
+        val lastId = prefs.getString("last_studied_lesson_id", null)
+
+        // 1) Previous unfinished lesson?
+        if (!lastId.isNullOrEmpty() && lastId != "shart_lesson") {
+            val lastLesson = allLessons.firstOrNull { it.id == lastId }
+            if (lastLesson != null && !completed.contains(lastId)) {
+                return lastLesson
+            }
         }
-        return _lessons.value.firstOrNull()?.id ?: "shart_lesson"
+
+        // 2) First uncompleted lesson
+        val firstUncompleted = allLessons.firstOrNull { !completed.contains(it.id) }
+        if (firstUncompleted != null) {
+            return firstUncompleted
+        }
+
+        // 3) Default to first lesson
+        return allLessons.firstOrNull()
     }
 
     fun setLastStudiedLessonId(lessonId: String) {
+        if (lessonId == "shart_lesson") return
         prefs.edit().putString("last_studied_lesson_id", lessonId).apply()
     }
 
     fun getLessonProgress(lessonId: String): Int {
+        if (lessonId == "shart_lesson") return 0
         return prefs.getInt("lesson_step_$lessonId", 0)
     }
 
     fun saveLessonProgress(lessonId: String, stepIndex: Int) {
+        if (lessonId == "shart_lesson") return
         prefs.edit().putInt("lesson_step_$lessonId", stepIndex).apply()
     }
 
     fun getExerciseScore(lessonId: String): Pair<Int, Int>? {
+        if (lessonId == "shart_lesson") return null
         if (!prefs.contains("score_${lessonId}_val")) return null
         val score = prefs.getInt("score_${lessonId}_val", 0)
         val total = prefs.getInt("score_${lessonId}_total", 5)
@@ -97,6 +158,7 @@ class LessonRepository(private val context: Context) {
     }
 
     fun saveExerciseScore(lessonId: String, score: Int, total: Int) {
+        if (lessonId == "shart_lesson") return
         prefs.edit()
             .putInt("score_${lessonId}_val", score)
             .putInt("score_${lessonId}_total", total)
@@ -107,15 +169,10 @@ class LessonRepository(private val context: Context) {
     }
 
     fun resetProgress() {
-        prefs.edit()
-            .remove("completed_lessons_set")
-            .remove("last_studied_lesson_id")
-            .apply()
-        // Clear all step and score prefs
-        val allKeys = prefs.all.keys.toList()
         val editor = prefs.edit()
+        val allKeys = prefs.all.keys.toList()
         for (key in allKeys) {
-            if (key.startsWith("lesson_step_") || key.startsWith("score_")) {
+            if (key.startsWith("lesson_step_") || key.startsWith("score_") || key == "completed_lessons_set" || key == "last_studied_lesson_id") {
                 editor.remove(key)
             }
         }
@@ -125,51 +182,22 @@ class LessonRepository(private val context: Context) {
 
     fun loadLessons() {
         try {
-            val jsonString = getActiveJsonString()
+            val jsonString = readAssetJson()
             val parsed = parseJson(jsonString)
-            _lessons.value = parsed
+            _lessons.value = parsed.sortedWith(
+                compareBy({ it.semester }, { it.unit }, { it.order })
+            )
         } catch (e: Exception) {
             e.printStackTrace()
-            // Fallback to asset directly if custom corrupted
-            val assetJson = readAssetJson()
-            _lessons.value = parseJson(assetJson)
         }
     }
 
     fun getActiveJsonString(): String {
-        val customFile = File(context.filesDir, "custom_lessons.json")
-        return if (customFile.exists()) {
-            customFile.readText()
-        } else {
-            readAssetJson()
-        }
+        return readAssetJson()
     }
 
     private fun readAssetJson(): String {
         return context.assets.open("lessons.json").bufferedReader().use { it.readText() }
-    }
-
-    fun saveCustomLessonsJson(jsonString: String): Boolean {
-        return try {
-            // Validate first
-            val parsed = parseJson(jsonString)
-            if (parsed.isEmpty()) return false
-            val customFile = File(context.filesDir, "custom_lessons.json")
-            customFile.writeText(jsonString)
-            _lessons.value = parsed
-            true
-        } catch (e: Exception) {
-            false
-        }
-    }
-
-    fun restoreDefaultLessons(): Boolean {
-        val customFile = File(context.filesDir, "custom_lessons.json")
-        if (customFile.exists()) {
-            customFile.delete()
-        }
-        loadLessons()
-        return true
     }
 
     private fun parseJson(jsonString: String): List<Lesson> {
@@ -180,92 +208,139 @@ class LessonRepository(private val context: Context) {
         for (i in 0 until lessonsArray.length()) {
             val lObj = lessonsArray.getJSONObject(i)
             val id = lObj.optString("id", "lesson_$i")
-            val title = lObj.optString("title", "")
-            val componentId = lObj.optString("componentId", "linguistic")
-            val componentName = lObj.optString("componentName", "الدرس اللغوي")
-            val semester = lObj.optInt("semester", 1)
-            val semesterName = lObj.optString("semesterName", "الدورة الأولى")
-            val shortDesc = lObj.optString("shortDescription", "")
+            if (id == "shart_lesson") continue // Ensure shart_lesson is never loaded
 
-            // Parse Cards
-            val cardsList = mutableListOf<LessonCard>()
+            val component = lObj.optString("component", "language")
+            val semester = lObj.optInt("semester", 1)
+            val unit = lObj.optInt("unit", 1)
+            val order = lObj.optInt("order", 1)
+            val tag = if (lObj.has("tag") && !lObj.isNull("tag")) lObj.getString("tag") else null
+            val title = lObj.optString("title", "")
+            val summary = lObj.optString("summary", "")
+
+            // Parse cards based on meta.schema
+            val cardsList = mutableListOf<CardItem>()
             val cardsArray = lObj.optJSONArray("cards") ?: JSONArray()
             for (c in 0 until cardsArray.length()) {
                 val cObj = cardsArray.getJSONObject(c)
-                cardsList.add(
-                    LessonCard(
-                        id = cObj.optString("id", "c_$c"),
-                        badge = cObj.optString("badge", "القاعدة"),
-                        rule = cObj.optString("rule", ""),
-                        exampleTitle = cObj.optString("exampleTitle", "مثال"),
-                        exampleText = cObj.optString("exampleText", ""),
-                        exampleBreakdown = cObj.optString("exampleBreakdown", ""),
-                        noteTitle = cObj.optString("noteTitle", "احفظ هذا"),
-                        noteText = cObj.optString("noteText", "")
-                    )
-                )
+                val type = cObj.optString("type", "rule")
+                val cardTitle = cObj.optString("title", "")
+
+                when (type) {
+                    "rule" -> {
+                        val text = if (cObj.has("text") && !cObj.isNull("text")) cObj.getString("text") else null
+                        val points = jsonArrayToStringList(cObj.optJSONArray("points"))
+                        cardsList.add(CardItem.RuleCard(title = cardTitle, text = text, points = points))
+                    }
+                    "example" -> {
+                        val items = mutableListOf<ExampleEntry>()
+                        val itemsArray = cObj.optJSONArray("items") ?: JSONArray()
+                        for (itIdx in 0 until itemsArray.length()) {
+                            val itObj = itemsArray.getJSONObject(itIdx)
+                            items.add(ExampleEntry(
+                                text = itObj.optString("text", ""),
+                                note = itObj.optString("note", "")
+                            ))
+                        }
+                        cardsList.add(CardItem.ExampleCard(title = cardTitle, items = items))
+                    }
+                    "irab" -> {
+                        val sentence = cObj.optString("sentence", "")
+                        val tip = if (cObj.has("tip") && !cObj.isNull("tip")) cObj.getString("tip") else null
+                        val steps = mutableListOf<IrabStep>()
+                        val stepsArray = cObj.optJSONArray("steps") ?: JSONArray()
+                        for (sIdx in 0 until stepsArray.length()) {
+                            val sObj = stepsArray.getJSONObject(sIdx)
+                            steps.add(IrabStep(
+                                word = sObj.optString("word", ""),
+                                irab = sObj.optString("irab", "")
+                            ))
+                        }
+                        cardsList.add(CardItem.IrabCard(sentence = sentence, steps = steps, tip = tip))
+                    }
+                    "facts" -> {
+                        val items = parseKeyValuePairs(cObj.optJSONArray("items"))
+                        cardsList.add(CardItem.FactsCard(title = cardTitle, items = items))
+                    }
+                    "vocab" -> {
+                        val items = parseKeyValuePairs(cObj.optJSONArray("items"))
+                        cardsList.add(CardItem.VocabCard(title = cardTitle, items = items))
+                    }
+                    "summary" -> {
+                        val text = cObj.optString("text", "")
+                        cardsList.add(CardItem.SummaryCard(title = cardTitle, text = text))
+                    }
+                    "steps" -> {
+                        val points = jsonArrayToStringList(cObj.optJSONArray("points"))
+                        cardsList.add(CardItem.StepsCard(title = cardTitle, points = points))
+                    }
+                    "model" -> {
+                        val text = cObj.optString("text", "")
+                        val points = jsonArrayToStringList(cObj.optJSONArray("points"))
+                        cardsList.add(CardItem.ModelCard(title = cardTitle, text = text, points = points))
+                    }
+                    "memorize" -> {
+                        val points = jsonArrayToStringList(cObj.optJSONArray("points"))
+                        cardsList.add(CardItem.MemorizeCard(title = cardTitle, points = points))
+                    }
+                    else -> {
+                        val text = cObj.optString("text", "")
+                        cardsList.add(CardItem.SummaryCard(title = cardTitle, text = text))
+                    }
+                }
             }
 
-            // Parse Exercises
-            val exercisesList = mutableListOf<Exercise>()
+            // Parse exercises based on meta.schema (mcq, true_false, order_words)
+            val exercisesList = mutableListOf<ExerciseItem>()
             val exercisesArray = lObj.optJSONArray("exercises") ?: JSONArray()
             for (e in 0 until exercisesArray.length()) {
                 val eObj = exercisesArray.getJSONObject(e)
-                val typeStr = eObj.optString("type", "single_choice")
-                val type = when (typeStr) {
-                    "true_false" -> ExerciseType.TRUE_FALSE
-                    "word_order" -> ExerciseType.WORD_ORDER
-                    else -> ExerciseType.SINGLE_CHOICE
-                }
+                val type = eObj.optString("type", "mcq")
+                val explanation = eObj.optString("explanation", "")
 
-                val options = mutableListOf<String>()
-                val optArray = eObj.optJSONArray("options")
-                if (optArray != null) {
-                    for (o in 0 until optArray.length()) {
-                        options.add(optArray.getString(o))
+                when (type) {
+                    "mcq" -> {
+                        val question = eObj.optString("question", "")
+                        val options = jsonArrayToStringList(eObj.optJSONArray("options"))
+                        val answerIndex = eObj.optInt("answer", 0)
+                        exercisesList.add(ExerciseItem.Mcq(
+                            question = question,
+                            options = options,
+                            answerIndex = answerIndex,
+                            explanation = explanation
+                        ))
+                    }
+                    "true_false" -> {
+                        val statement = eObj.optString("statement", "")
+                        val answer = eObj.optBoolean("answer", false)
+                        exercisesList.add(ExerciseItem.TrueFalse(
+                            statement = statement,
+                            answer = answer,
+                            explanation = explanation
+                        ))
+                    }
+                    "order_words" -> {
+                        val words = jsonArrayToStringList(eObj.optJSONArray("words"))
+                        val answer = jsonArrayToStringList(eObj.optJSONArray("answer"))
+                        exercisesList.add(ExerciseItem.OrderWords(
+                            words = words,
+                            answer = answer,
+                            explanation = explanation
+                        ))
                     }
                 }
-
-                val words = mutableListOf<String>()
-                val wordsArray = eObj.optJSONArray("words")
-                if (wordsArray != null) {
-                    for (w in 0 until wordsArray.length()) {
-                        words.add(wordsArray.getString(w))
-                    }
-                }
-
-                val correctOrder = mutableListOf<String>()
-                val coArray = eObj.optJSONArray("correctOrder")
-                if (coArray != null) {
-                    for (co in 0 until coArray.length()) {
-                        correctOrder.add(coArray.getString(co))
-                    }
-                }
-
-                exercisesList.add(
-                    Exercise(
-                        id = eObj.optString("id", "e_$e"),
-                        type = type,
-                        title = eObj.optString("title", "تمرين"),
-                        question = eObj.optString("question", ""),
-                        options = options,
-                        correctAnswerIndex = eObj.optInt("correctAnswerIndex", 0),
-                        words = words,
-                        correctOrder = correctOrder,
-                        explanation = eObj.optString("explanation", "")
-                    )
-                )
             }
 
             result.add(
                 Lesson(
                     id = id,
-                    title = title,
-                    componentId = componentId,
-                    componentName = componentName,
+                    component = component,
                     semester = semester,
-                    semesterName = semesterName,
-                    shortDescription = shortDesc,
+                    unit = unit,
+                    order = order,
+                    tag = tag,
+                    title = title,
+                    summary = summary,
                     cards = cardsList,
                     exercises = exercisesList
                 )
@@ -274,19 +349,41 @@ class LessonRepository(private val context: Context) {
         return result
     }
 
+    private fun parseKeyValuePairs(array: JSONArray?): List<KeyValuePair> {
+        if (array == null) return emptyList()
+        val list = mutableListOf<KeyValuePair>()
+        for (i in 0 until array.length()) {
+            val obj = array.getJSONObject(i)
+            list.add(KeyValuePair(
+                label = obj.optString("label", ""),
+                value = obj.optString("value", "")
+            ))
+        }
+        return list
+    }
+
+    private fun jsonArrayToStringList(array: JSONArray?): List<String> {
+        if (array == null) return emptyList()
+        val list = mutableListOf<String>()
+        for (i in 0 until array.length()) {
+            list.add(array.getString(i))
+        }
+        return list
+    }
+
     fun getComponentInfos(): List<ComponentInfo> {
         val allLessons = _lessons.value
         val completed = _completedLessons.value
 
         val componentDefs = listOf(
-            Triple("reading", "النصوص القرائية والشعرية", "نص + شرح + أسئلة الفهم"),
-            Triple("linguistic", "الدرس اللغوي", "قاعدة + أمثلة + تمرين"),
-            Triple("composition", "التعبير والإنشاء", "خطوات الكتابة + نماذج مُنجزة"),
-            Triple("exams", "نماذج الامتحانات", "فروض + تصحيح مفصّل")
+            Triple("texts", "النصوص القرائية والشعرية", "نص + شرح + أسئلة الفهم"),
+            Triple("language", "الدرس اللغوي", "قاعدة + أمثلة + إعراب وتطبيق"),
+            Triple("writing", "التعبير والإنشاء", "خطوات الكتابة + نماذج مُنجزة"),
+            Triple("exams", "نماذج الامتحانات", "فروض موحدة + تصحيح مفصّل")
         )
 
         return componentDefs.map { (id, title, subtitle) ->
-            val matching = allLessons.filter { it.componentId == id }
+            val matching = allLessons.filter { it.component == id }
             val total = matching.size
             val done = matching.count { completed.contains(it.id) }
             ComponentInfo(

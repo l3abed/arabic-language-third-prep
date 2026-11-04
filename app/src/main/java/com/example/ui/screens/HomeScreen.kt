@@ -17,7 +17,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -48,8 +47,9 @@ fun HomeScreen(
     viewModel: ArabicAppViewModel,
     modifier: Modifier = Modifier
 ) {
-    val lastStudiedLesson by viewModel.lastStudiedLesson.collectAsState()
+    val resumeLesson by viewModel.resumeLesson.collectAsState()
     val componentInfos by viewModel.componentInfos.collectAsState()
+    val completedLessons by viewModel.completedLessons.collectAsState()
     val settings by viewModel.settings.collectAsState()
 
     LazyColumn(
@@ -79,16 +79,22 @@ fun HomeScreen(
             }
         }
 
-        // Hero Card: "تابع من حيث توقفت"
+        // Hero Resume Card: shows previous unfinished lesson or first uncompleted lesson
         item {
-            lastStudiedLesson?.let { lesson ->
+            resumeLesson?.let { lesson ->
                 val progressStep = viewModel.repository.getLessonProgress(lesson.id)
                 val totalSteps = lesson.cards.size.coerceAtLeast(1)
-                val fraction = (progressStep.toFloat() / totalSteps).coerceIn(0.2f, 1f)
+                val isPreviouslyStarted = progressStep > 0
+                val fraction = if (isPreviouslyStarted) {
+                    (progressStep.toFloat() / totalSteps).coerceIn(0.15f, 1f)
+                } else {
+                    0.05f
+                }
 
                 HeroResumeCard(
                     lesson = lesson,
                     fraction = fraction,
+                    isPreviouslyStarted = isPreviouslyStarted,
                     showTashkeel = settings.showTashkeel,
                     onResumeClick = {
                         viewModel.openLesson(lesson.id)
@@ -109,7 +115,7 @@ fun HomeScreen(
             )
         }
 
-        // 4 Components with progress bar
+        // Components with progress bars
         items(componentInfos.size) { index ->
             val info = componentInfos[index]
             ComponentProgressCard(
@@ -131,6 +137,7 @@ fun HomeScreen(
 private fun HeroResumeCard(
     lesson: Lesson,
     fraction: Float,
+    isPreviouslyStarted: Boolean,
     showTashkeel: Boolean,
     onResumeClick: () -> Unit
 ) {
@@ -149,7 +156,7 @@ private fun HeroResumeCard(
         ) {
             // Gold Subtitle
             Text(
-                text = "تابع من حيث توقفت",
+                text = if (isPreviouslyStarted) "تابع من حيث توقفت" else "الدرس التالي للمراجعة",
                 color = GoldAccent,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold
@@ -160,15 +167,16 @@ private fun HeroResumeCard(
             Text(
                 text = TextHelper.formatArabic(lesson.title, showTashkeel),
                 color = Color.White,
-                fontSize = 28.sp,
+                fontSize = 24.sp,
                 fontFamily = AmiriFontFamily,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                lineHeight = 32.sp
             )
             Spacer(modifier = Modifier.height(6.dp))
 
             // Component and semester info
             Text(
-                text = "${lesson.componentName} • ${lesson.semesterName}",
+                text = "${lesson.componentDisplayName} • ${lesson.semesterDisplayName} • ${lesson.unitDisplayName}",
                 color = Color.White.copy(alpha = 0.8f),
                 fontSize = 13.sp
             )
@@ -206,7 +214,7 @@ private fun HeroResumeCard(
                 )
             ) {
                 Text(
-                    text = "متابعة الدرس",
+                    text = if (isPreviouslyStarted) "متابعة الدرس" else "بدء الدرس",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -270,8 +278,8 @@ private fun ComponentProgressCard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Progress bar at bottom of card matching screenshot 3
-            val displayProgress = if (info.totalLessons > 0) info.progress else 0.15f
+            // Progress bar at bottom of card
+            val displayProgress = if (info.totalLessons > 0) info.progress else 0.05f
             Box(
                 modifier = Modifier
                     .fillMaxWidth()

@@ -462,32 +462,56 @@ fun AccountScreen(
                     ) {
                         Text(
                             text = """{
-  "id": "farid_lesson",
-  "title": "عنوان الدرس",
-  "componentId": "linguistic", 
-  "componentName": "الدرس اللغوي",
+  "id": "lang-s1-u1-example",
+  "component": "language", 
   "semester": 1,
-  "semesterName": "الدورة الأولى",
-  "shortDescription": "قاعدة + أمثلة",
+  "unit": 1,
+  "order": 3,
+  "title": "عنوان الدرس",
+  "summary": "ملخص الدرس هنا",
   "cards": [
     {
-      "badge": "القاعدة",
-      "rule": "نص القاعدة هنا...",
-      "exampleTitle": "مثال",
-      "exampleText": "جملة الشاهد بالشكل التام",
-      "exampleBreakdown": "تفكيك عناصر الجملة",
-      "noteTitle": "احفظ هذا",
-      "noteText": "فائدة إعرابية سريعة"
+      "type": "rule",
+      "title": "القاعدة",
+      "text": "نص القاعدة...",
+      "points": ["نقطة 1", "نقطة 2"]
+    },
+    {
+      "type": "example",
+      "title": "أمثلة",
+      "items": [{"text": "الجملة", "note": "ملاحظة"}]
+    },
+    {
+      "type": "irab",
+      "sentence": "الجملة المعربة",
+      "steps": [{"word": "الكلمة", "irab": "الإعراب"}],
+      "tip": "فائدة إعرابية"
+    },
+    {
+      "type": "memorize",
+      "title": "احفظ هذا",
+      "points": ["نقطة للحفظ"]
     }
   ],
   "exercises": [
     {
-      "type": "single_choice",
-      "title": "اختر الإجابة",
-      "question": "نص السؤال؟",
-      "options": ["أ", "ب", "ج"],
-      "correctAnswerIndex": 0,
-      "explanation": "تعليل الإجابة..."
+      "type": "mcq",
+      "question": "السؤال؟",
+      "options": ["خيار 1", "خيار 2", "خيار 3", "خيار 4"],
+      "answer": 0,
+      "explanation": "تعليل الإجابة"
+    },
+    {
+      "type": "true_false",
+      "statement": "الجملة صحيحة أم خاطئة؟",
+      "answer": true,
+      "explanation": "التعليل"
+    },
+    {
+      "type": "order_words",
+      "words": ["كلمة 2", "كلمة 1"],
+      "answer": ["كلمة 1", "كلمة 2"],
+      "explanation": "التعليل"
     }
   ]
 }""",
@@ -498,9 +522,9 @@ fun AccountScreen(
                     }
                     Text(
                         "المكوّنات المتاحة هي:\n" +
-                                "• reading (النصوص القرائية)\n" +
-                                "• linguistic (الدرس اللغوي)\n" +
-                                "• composition (التعبير والإنشاء)\n" +
+                                "• texts (النصوص القرائية والشعرية)\n" +
+                                "• language (الدرس اللغوي)\n" +
+                                "• writing (التعبير والإنشاء)\n" +
                                 "• exams (نماذج الامتحانات)",
                         fontSize = 12.sp,
                         color = PrimaryDarkTeal
@@ -515,24 +539,25 @@ fun AccountScreen(
         )
     }
 
-    // JSON Viewer / Editor Dialog
+    // JSON Viewer Dialog
     if (showJsonEditorDialog) {
         AlertDialog(
             onDismissRequest = { showJsonEditorDialog = false },
             title = {
-                Text("محرّر محتوى الدروس (JSON)", fontWeight = FontWeight.Bold)
+                Text("استعراض محتوى lessons.json", fontWeight = FontWeight.Bold)
             },
             text = {
                 Column {
                     Text(
-                        "يمكنك تعديل المحتوى هنا أو استرجاع النسخة الأصلية:",
+                        "محتوى الدروس الفعلي المقروء من assets/lessons.json:",
                         fontSize = 12.sp,
                         color = TextSecondaryLight
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = customJsonText,
-                        onValueChange = { customJsonText = it },
+                        onValueChange = { },
+                        readOnly = true,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(280.dp),
@@ -542,29 +567,10 @@ fun AccountScreen(
             },
             confirmButton = {
                 Button(
-                    onClick = {
-                        val success = viewModel.repository.saveCustomLessonsJson(customJsonText)
-                        if (success) {
-                            Toast.makeText(context, "تم حفظ الدروس الجديدة بنجاح!", Toast.LENGTH_SHORT).show()
-                            showJsonEditorDialog = false
-                        } else {
-                            Toast.makeText(context, "خطأ في بنية الـ JSON! تأكد من صحة الأقواس", Toast.LENGTH_LONG).show()
-                        }
-                    },
+                    onClick = { showJsonEditorDialog = false },
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryDarkTeal)
                 ) {
-                    Text("حفظ وتطبيق", fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.repository.restoreDefaultLessons()
-                        showJsonEditorDialog = false
-                        Toast.makeText(context, "تم استرجاع النسخة الافتراضية", Toast.LENGTH_SHORT).show()
-                    }
-                ) {
-                    Text("استرجاع الافتراضي")
+                    Text("إغلاق", fontWeight = FontWeight.Bold)
                 }
             }
         )

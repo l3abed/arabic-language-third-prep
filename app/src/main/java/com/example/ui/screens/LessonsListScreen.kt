@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.FitnessCenter
 import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material3.Button
@@ -66,12 +65,15 @@ fun LessonsListScreen(
     val selectedSemester by viewModel.selectedSemester.collectAsState()
     val selectedComponentId by viewModel.selectedComponentId.collectAsState()
     val settings by viewModel.settings.collectAsState()
+    val componentInfos by viewModel.componentInfos.collectAsState()
 
-    val filteredLessons = lessons.filter { lesson ->
-        val matchesSemester = (selectedSemester == null || lesson.semester == selectedSemester)
-        val matchesComponent = (selectedComponentId == null || lesson.componentId == selectedComponentId)
-        matchesSemester && matchesComponent
-    }
+    val filteredLessons = lessons
+        .filter { lesson ->
+            val matchesSemester = (selectedSemester == null || lesson.semester == selectedSemester)
+            val matchesComponent = (selectedComponentId == null || lesson.component == selectedComponentId)
+            matchesSemester && matchesComponent
+        }
+        .sortedWith(compareBy({ it.component }, { it.semester }, { it.unit }, { it.order }))
 
     Column(
         modifier = modifier
@@ -82,7 +84,7 @@ fun LessonsListScreen(
 
         // Title
         Text(
-            text = "فهرس الدروس",
+            text = "فهرس الدروس المقررة",
             style = MaterialTheme.typography.displayMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground,
@@ -130,24 +132,72 @@ fun LessonsListScreen(
             )
             FilterChipItem(
                 label = "النصوص القرائية",
-                isSelected = selectedComponentId == "reading",
-                onClick = { viewModel.setComponentFilter("reading") }
+                isSelected = selectedComponentId == "texts",
+                onClick = { viewModel.setComponentFilter("texts") }
             )
             FilterChipItem(
                 label = "الدرس اللغوي",
-                isSelected = selectedComponentId == "linguistic",
-                onClick = { viewModel.setComponentFilter("linguistic") }
+                isSelected = selectedComponentId == "language",
+                onClick = { viewModel.setComponentFilter("language") }
             )
             FilterChipItem(
                 label = "التعبير والإنشاء",
-                isSelected = selectedComponentId == "composition",
-                onClick = { viewModel.setComponentFilter("composition") }
+                isSelected = selectedComponentId == "writing",
+                onClick = { viewModel.setComponentFilter("writing") }
             )
             FilterChipItem(
                 label = "نماذج الامتحانات",
                 isSelected = selectedComponentId == "exams",
                 onClick = { viewModel.setComponentFilter("exams") }
             )
+        }
+
+        // Active component progress indicator
+        selectedComponentId?.let { compId ->
+            val compInfo = componentInfos.firstOrNull { it.id == compId }
+            if (compInfo != null && compInfo.totalLessons > 0) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "تقدّم ${compInfo.title}:",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = PrimaryDarkTeal
+                            )
+                            Text(
+                                text = "${compInfo.completedLessons} من ${compInfo.totalLessons} دروس",
+                                fontSize = 12.sp,
+                                color = TextSecondaryLight
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(5.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(Color(0xFFDDE6E4))
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(compInfo.progress.coerceIn(0.05f, 1f))
+                                    .height(5.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(PrimaryDarkTeal)
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -250,7 +300,7 @@ private fun LessonItemCard(
                 verticalAlignment = Alignment.Top
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    // Badge: Component & Semester
+                    // Badge: Component & Semester & Tag
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -262,17 +312,33 @@ private fun LessonItemCard(
                                 .padding(horizontal = 8.dp, vertical = 3.dp)
                         ) {
                             Text(
-                                text = lesson.componentName,
+                                text = lesson.componentDisplayName,
                                 color = PrimaryDarkTeal,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
 
+                        lesson.tag?.let { tagText ->
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(PrimaryDarkTeal.copy(alpha = 0.08f))
+                                    .padding(horizontal = 7.dp, vertical = 3.dp)
+                            ) {
+                                Text(
+                                    text = tagText,
+                                    color = PrimaryDarkTeal,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+
                         Text(
-                            text = "• ${lesson.semesterName}",
+                            text = "• ${lesson.unitDisplayName} - الترتيب ${lesson.order}",
                             color = TextMutedLight,
-                            fontSize = 12.sp
+                            fontSize = 11.sp
                         )
                     }
 
@@ -285,8 +351,19 @@ private fun LessonItemCard(
                         fontFamily = AmiriFontFamily,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 20.sp
+                        fontSize = 19.sp,
+                        lineHeight = 26.sp
                     )
+
+                    if (lesson.summary.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = TextHelper.formatArabic(lesson.summary, showTashkeel),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondaryLight,
+                            fontSize = 13.sp
+                        )
+                    }
                 }
 
                 // Completion status icon
@@ -318,17 +395,17 @@ private fun LessonItemCard(
             ) {
                 Text(
                     text = "${lesson.cards.size} محطات شرح",
-                    fontSize = 13.sp,
+                    fontSize = 12.sp,
                     color = TextSecondaryLight
                 )
                 Text(
                     text = "•",
-                    fontSize = 13.sp,
+                    fontSize = 12.sp,
                     color = TextMutedLight
                 )
                 Text(
                     text = "${lesson.exercises.size} أسئلة تدريبية",
-                    fontSize = 13.sp,
+                    fontSize = 12.sp,
                     color = TextSecondaryLight
                 )
 

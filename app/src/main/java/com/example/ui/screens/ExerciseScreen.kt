@@ -51,8 +51,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.model.Exercise
-import com.example.model.ExerciseType
+import com.example.model.ExerciseItem
 import com.example.ui.theme.AmiriFontFamily
 import com.example.ui.theme.BorderLight
 import com.example.ui.theme.ErrorBgLight
@@ -96,6 +95,7 @@ fun ExerciseScreen(
     var isAnswerSubmitted by remember(lesson.id, questionIndex) { mutableStateOf(false) }
     var isAnswerCorrect by remember(lesson.id, questionIndex) { mutableStateOf(false) }
     var selectedOptionIndex by remember(lesson.id, questionIndex) { mutableStateOf<Int?>(null) }
+    var selectedBoolAnswer by remember(lesson.id, questionIndex) { mutableStateOf<Boolean?>(null) }
     val orderedWords = remember(lesson.id, questionIndex) { mutableStateListOf<String>() }
     var isQuizCompleted by remember(lesson.id) { mutableStateOf(false) }
 
@@ -133,7 +133,7 @@ fun ExerciseScreen(
         ) {
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Top Bar matching Screenshot 2
+            // Top Bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -149,13 +149,16 @@ fun ExerciseScreen(
                     color = TextSecondaryLight
                 )
 
-                // Title: "تمرين • أسلوب الشرط"
+                // Title
                 Text(
                     text = "تمرين • ${TextHelper.formatArabic(lesson.title, settings.showTashkeel)}",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground,
-                    fontSize = 18.sp
+                    fontSize = 17.sp,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
+                    textAlign = TextAlign.Center
                 )
 
                 // Close button 'X'
@@ -174,11 +177,11 @@ fun ExerciseScreen(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // Segmented progress bar matching Screenshot 2
+            // Segmented progress bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 8.dp),
+                    .padding(vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 for (i in 0 until totalQuestions) {
@@ -202,7 +205,7 @@ fun ExerciseScreen(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Question Card (White) matching Screenshot 2
+                // Question Card (White)
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -218,8 +221,13 @@ fun ExerciseScreen(
                             .fillMaxWidth()
                             .padding(22.dp)
                     ) {
+                        val typeLabel = when (exercise) {
+                            is ExerciseItem.Mcq -> "اختر الإجابة الصحيحة"
+                            is ExerciseItem.TrueFalse -> "حدد صح أم خطأ"
+                            is ExerciseItem.OrderWords -> "رتّب الكلمات بالترتيب الصحيح"
+                        }
                         Text(
-                            text = exercise.title,
+                            text = typeLabel,
                             color = TextSecondaryLight,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium,
@@ -230,7 +238,7 @@ fun ExerciseScreen(
                         Spacer(modifier = Modifier.height(12.dp))
 
                         Text(
-                            text = TextHelper.formatArabic(exercise.question, settings.showTashkeel),
+                            text = TextHelper.formatArabic(exercise.prompt, settings.showTashkeel),
                             fontFamily = AmiriFontFamily,
                             fontSize = (22 * settings.fontScale).sp,
                             fontWeight = FontWeight.Bold,
@@ -242,15 +250,13 @@ fun ExerciseScreen(
                     }
                 }
 
-                // Options / Interaction
-                when (exercise.type) {
-                    ExerciseType.SINGLE_CHOICE, ExerciseType.TRUE_FALSE -> {
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
+                // Options / Interaction based on Exercise Type
+                when (exercise) {
+                    is ExerciseItem.Mcq -> {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             exercise.options.forEachIndexed { optIndex, optionText ->
                                 val isSelected = selectedOptionIndex == optIndex
-                                val isCorrectOption = optIndex == exercise.correctAnswerIndex
+                                val isCorrectOption = optIndex == exercise.answerIndex
 
                                 val borderColor = when {
                                     isAnswerSubmitted && isSelected && isCorrectOption -> SuccessGreen
@@ -258,7 +264,6 @@ fun ExerciseScreen(
                                     isSelected -> PrimaryDarkTeal
                                     else -> BorderLight
                                 }
-
                                 val borderWidth = if (isSelected) 2.dp else 1.dp
 
                                 Card(
@@ -270,7 +275,7 @@ fun ExerciseScreen(
                                         .clickable(enabled = !isAnswerSubmitted) {
                                             selectedOptionIndex = optIndex
                                             isAnswerSubmitted = true
-                                            val correct = optIndex == exercise.correctAnswerIndex
+                                            val correct = optIndex == exercise.answerIndex
                                             isAnswerCorrect = correct
                                             if (correct) score++
                                         },
@@ -287,7 +292,6 @@ fun ExerciseScreen(
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        // Checkmark if selected
                                         if (isSelected) {
                                             Icon(
                                                 imageVector = Icons.Filled.Check,
@@ -305,6 +309,71 @@ fun ExerciseScreen(
                                             fontSize = (20 * settings.fontScale).sp,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onSurface,
+                                            textAlign = TextAlign.End,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    is ExerciseItem.TrueFalse -> {
+                        val options = listOf(Pair("صحيح", true), Pair("خطأ", false))
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            options.forEach { (label, boolValue) ->
+                                val isSelected = selectedBoolAnswer == boolValue
+                                val isCorrectOption = boolValue == exercise.answer
+
+                                val borderColor = when {
+                                    isAnswerSubmitted && isSelected && isCorrectOption -> SuccessGreen
+                                    isAnswerSubmitted && isSelected && !isCorrectOption -> ErrorRed
+                                    isSelected -> PrimaryDarkTeal
+                                    else -> BorderLight
+                                }
+                                val borderWidth = if (isSelected) 2.dp else 1.dp
+
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("exercise_tf_$label")
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .border(borderWidth, borderColor, RoundedCornerShape(14.dp))
+                                        .clickable(enabled = !isAnswerSubmitted) {
+                                            selectedBoolAnswer = boolValue
+                                            isAnswerSubmitted = true
+                                            val correct = boolValue == exercise.answer
+                                            isAnswerCorrect = correct
+                                            if (correct) score++
+                                        },
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 18.dp, vertical = 16.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        if (isSelected) {
+                                            Icon(
+                                                imageVector = Icons.Filled.Check,
+                                                contentDescription = null,
+                                                tint = if (isAnswerSubmitted && !isAnswerCorrect) ErrorRed else PrimaryDarkTeal,
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                        } else {
+                                            Spacer(modifier = Modifier.size(22.dp))
+                                        }
+
+                                        Text(
+                                            text = label,
+                                            fontFamily = AmiriFontFamily,
+                                            fontSize = (22 * settings.fontScale).sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface,
                                             textAlign = TextAlign.End
                                         )
                                     }
@@ -313,13 +382,12 @@ fun ExerciseScreen(
                         }
                     }
 
-                    ExerciseType.WORD_ORDER -> {
-                        // Word Order Exercise: Reorder chips
+                    is ExerciseItem.OrderWords -> {
                         Column(
                             modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
-                            // Target construction box
+                            // Target ordered words container
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(14.dp),
@@ -333,7 +401,7 @@ fun ExerciseScreen(
                                         .padding(16.dp)
                                 ) {
                                     Text(
-                                        text = "الجملة المركبة:",
+                                        text = "الترتيب المركب (انقر على الكلمة لإزالتها):",
                                         fontSize = 13.sp,
                                         color = TextSecondaryLight
                                     )
@@ -341,7 +409,7 @@ fun ExerciseScreen(
 
                                     if (orderedWords.isEmpty()) {
                                         Text(
-                                            text = "انقر على الكلمات بالترتيب لتكوين الجملة",
+                                            text = "انقر على الكلمات المبعثرة بالترتيب لتكوين الجملة",
                                             fontSize = 14.sp,
                                             color = TextMutedLight
                                         )
@@ -374,7 +442,7 @@ fun ExerciseScreen(
                                 }
                             }
 
-                            // Source words
+                            // Source scattered words
                             val availableWords = exercise.words.filter { !orderedWords.contains(it) }
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -406,7 +474,7 @@ fun ExerciseScreen(
                                 Button(
                                     onClick = {
                                         isAnswerSubmitted = true
-                                        val correct = orderedWords.toList() == exercise.correctOrder
+                                        val correct = orderedWords.toList() == exercise.answer
                                         isAnswerCorrect = correct
                                         if (correct) score++
                                     },
@@ -420,7 +488,7 @@ fun ExerciseScreen(
                     }
                 }
 
-                // Immediate Feedback Card matching Screenshot 2
+                // Immediate Feedback Card displaying explanation
                 if (isAnswerSubmitted) {
                     Card(
                         modifier = Modifier
@@ -438,7 +506,7 @@ fun ExerciseScreen(
                                 .padding(18.dp)
                         ) {
                             Text(
-                                text = if (isAnswerCorrect) "إجابة صحيحة!" else "إجابة غير صحيحة",
+                                text = if (isAnswerCorrect) "إجابة صحيحة! أحسنت" else "إجابة غير صحيحة",
                                 color = GoldAccent,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold
@@ -457,7 +525,7 @@ fun ExerciseScreen(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // Bottom Action Button: "السؤال التالي" in Gold (#F2B84B) matching Screenshot 2
+            // Bottom Action Button: "السؤال التالي"
             if (isAnswerSubmitted) {
                 Button(
                     onClick = {

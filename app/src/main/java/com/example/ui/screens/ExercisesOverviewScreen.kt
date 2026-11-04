@@ -135,7 +135,7 @@ private fun ExerciseLessonCard(
                         .padding(horizontal = 8.dp, vertical = 2.dp)
                 ) {
                     Text(
-                        text = lesson.componentName,
+                        text = lesson.componentDisplayName,
                         color = PrimaryDarkTeal,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
