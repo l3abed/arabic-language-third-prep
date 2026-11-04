@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -202,8 +203,85 @@ fun LessonsListScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Lessons List
-        if (filteredLessons.isEmpty()) {
+        // Lessons List or Exam Section
+        if (selectedComponentId == "exams") {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("homework_exam_card"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(GoldLight.copy(alpha = 0.3f))
+                                .border(1.dp, GoldAccent, RoundedCornerShape(8.dp))
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "20 / 20 نقطة",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = PrimaryDarkTeal
+                            )
+                        }
+
+                        Text(
+                            text = "الفرض المحروس الأول",
+                            fontFamily = AmiriFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 20.sp,
+                            color = PrimaryDarkTeal
+                        )
+                    }
+
+                    Text(
+                        text = "نص الانطلاق: «التسامح والتضامن أساس التعايش الإنساني»",
+                        fontFamily = AmiriFontFamily,
+                        fontSize = 16.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    Text(
+                        text = "يشمل: القراءة والفهم (8 ن)، الدرس اللغوي (6 ن)، التعبير والإنشاء (6 ن) مع نموذج التصحيح وسلم التنقيط.",
+                        fontSize = 13.sp,
+                        color = TextSecondaryLight,
+                        lineHeight = 18.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Button(
+                        onClick = { viewModel.openExam() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .testTag("start_homework_exam_button"),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryDarkTeal)
+                    ) {
+                        Text(
+                            text = "فتح الفرض المنزلي ونموذج التصحيح",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp
+                        )
+                    }
+                }
+            }
+        } else if (filteredLessons.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()

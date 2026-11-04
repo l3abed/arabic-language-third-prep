@@ -1,6 +1,8 @@
 package com.example.viewmodel
 
 import android.app.Application
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.LessonRepository
@@ -26,12 +28,19 @@ enum class NavTab {
 enum class ActiveScreen {
     TABS,
     LESSON_DETAIL,
-    EXERCISE_SESSION
+    EXERCISE_SESSION,
+    EXAM_VIEW
 }
 
 class ArabicAppViewModel(application: Application) : AndroidViewModel(application) {
     val repository = LessonRepository(application)
     val audioPlayer = ArabicAudioPlayer(application)
+
+    // Exam data & in-memory answers (strictly not saved in localStorage / SharedPreferences)
+    val homeworkExam = repository.getHomeworkExam()
+    val examAnswers = androidx.compose.runtime.mutableStateMapOf<String, String>()
+    var isExamSubmitted by androidx.compose.runtime.mutableStateOf(false)
+    var showCorrectionModel by androidx.compose.runtime.mutableStateOf(false)
 
     private val _currentTab = MutableStateFlow(NavTab.HOME)
     val currentTab: StateFlow<NavTab> = _currentTab.asStateFlow()
@@ -166,6 +175,29 @@ class ArabicAppViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun speakText(text: String) {
         audioPlayer.speak(text, settings.value.speechRate)
+    }
+
+    fun openExam() {
+        _activeScreen.value = ActiveScreen.EXAM_VIEW
+    }
+
+    fun updateExamAnswer(key: String, text: String) {
+        examAnswers[key] = text
+    }
+
+    fun submitExam() {
+        isExamSubmitted = true
+        showCorrectionModel = true
+    }
+
+    fun toggleCorrectionModel() {
+        showCorrectionModel = !showCorrectionModel
+    }
+
+    fun resetExam() {
+        examAnswers.clear()
+        isExamSubmitted = false
+        showCorrectionModel = false
     }
 
     override fun onCleared() {

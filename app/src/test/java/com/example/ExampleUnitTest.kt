@@ -21,4 +21,16 @@ class ExampleUnitTest {
         assertTrue("Contains texts-s1-u1-hadith-al-rooh", content.contains("texts-s1-u1-hadith-al-rooh"))
         assertTrue("Contains writing-s1-u1-diary", content.contains("writing-s1-u1-diary"))
     }
+
+    @Test
+    fun testExamJsonValid() {
+        val jsonFile = File("src/main/assets/exam-s1-homework-1.json")
+        val content = if (jsonFile.exists()) jsonFile.readText() else File("app/src/main/assets/exam-s1-homework-1.json").readText()
+
+        assertTrue(content.contains("exam-s1-homework-1"))
+        assertTrue(content.contains("التَّسَامُحُ") || content.contains("التسامح"))
+        assertTrue(content.contains("\"id\": \"A\"") || content.contains("\"id\":\"A\""))
+        assertTrue(content.contains("\"id\": \"B\"") || content.contains("\"id\":\"B\""))
+        assertTrue(content.contains("\"id\": \"C\"") || content.contains("\"id\":\"C\""))
+    }
 }

@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.components.AppBottomNav
 import com.example.ui.screens.AccountScreen
+import com.example.ui.screens.ExamScreen
 import com.example.ui.screens.ExerciseScreen
 import com.example.ui.screens.ExercisesOverviewScreen
 import com.example.ui.screens.HomeScreen
@@ -78,6 +79,10 @@ fun ArabicStudyApp(
 
                 ActiveScreen.EXERCISE_SESSION -> {
                     ExerciseScreen(viewModel = viewModel)
+                }
+
+                ActiveScreen.EXAM_VIEW -> {
+                    ExamScreen(viewModel = viewModel)
                 }
 
                 ActiveScreen.TABS -> {

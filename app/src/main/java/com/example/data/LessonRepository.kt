@@ -4,11 +4,16 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.example.model.CardItem
 import com.example.model.ComponentInfo
+import com.example.model.ExamData
+import com.example.model.ExamPassage
+import com.example.model.ExamQuestion
+import com.example.model.ExamSection
 import com.example.model.ExampleEntry
 import com.example.model.ExerciseItem
 import com.example.model.IrabStep
 import com.example.model.KeyValuePair
 import com.example.model.Lesson
+import com.example.model.RubricItem
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -394,5 +399,135 @@ class LessonRepository(private val context: Context) {
                 completedLessons = done
             )
         }
+    }
+
+    fun getHomeworkExam(): ExamData? {
+        return try {
+            val jsonString = context.assets.open("exam-s1-homework-1.json").bufferedReader().use { it.readText() }
+            parseExamJson(jsonString)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    private fun parseExamJson(jsonString: String): ExamData {
+        val root = JSONObject(jsonString)
+        val id = root.optString("id", "exam-s1-homework-1")
+        val component = root.optString("component", "exams")
+        val semester = root.optInt("semester", 1)
+        val unit = root.optInt("unit", 1)
+        val type = root.optString("type", "homework")
+        val order = root.optInt("order", 1)
+        val title = root.optString("title", "الفرض المنزلي الأول")
+        val subject = root.optString("subject", "")
+        val duration = root.optString("duration", "مرنة")
+        val declaredTotal = root.optInt("declared_total", 20)
+        val noteForTeacher = root.optString("note_for_teacher", "")
+
+        val passageObj = root.getJSONObject("passage")
+        val passage = ExamPassage(
+            title = passageObj.optString("title", ""),
+            text = passageObj.optString("text", "")
+        )
+
+        val sectionsList = mutableListOf<ExamSection>()
+        val sectionsArray = root.getJSONArray("sections")
+        for (s in 0 until sectionsArray.length()) {
+            val sObj = sectionsArray.getJSONObject(s)
+            val sId = sObj.optString("id", "")
+            val sTitle = sObj.optString("title", "")
+            val sPoints = sObj.optDouble("points", 0.0)
+            val sTopic = if (sObj.has("topic") && !sObj.isNull("topic")) sObj.getString("topic") else null
+            val sModelText = if (sObj.has("model_text") && !sObj.isNull("model_text")) sObj.getString("model_text") else null
+            val sGradingNote = if (sObj.has("grading_note") && !sObj.isNull("grading_note")) sObj.getString("grading_note") else null
+
+            val questionsList = mutableListOf<ExamQuestion>()
+            val questionsArray = sObj.optJSONArray("questions")
+            if (questionsArray != null) {
+                for (q in 0 until questionsArray.length()) {
+                    val qObj = questionsArray.getJSONObject(q)
+                    val no = qObj.optString("no", "${q + 1}")
+                    val points = qObj.optDouble("points", 0.0)
+                    val prompt = qObj.optString("prompt", "")
+                    val grading = qObj.optString("grading", "")
+                    val modelRaw: Any? = when {
+                        qObj.isNull("model") -> null
+                        qObj.optString("model", null) != null && qObj.get("model") is String -> qObj.getString("model")
+                        qObj.optJSONArray("model") != null -> parseJsonArrayToAny(qObj.getJSONArray("model"))
+                        qObj.optJSONObject("model") != null -> parseJsonObjectToMap(qObj.getJSONObject("model"))
+                        else -> qObj.opt("model")
+                    }
+                    questionsList.add(ExamQuestion(no, points, prompt, modelRaw, grading))
+                }
+            }
+
+            val rubricList = mutableListOf<RubricItem>()
+            val rubricArray = sObj.optJSONArray("rubric")
+            if (rubricArray != null) {
+                for (r in 0 until rubricArray.length()) {
+                    val rObj = rubricArray.getJSONObject(r)
+                    rubricList.add(RubricItem(
+                        criterion = rObj.optString("criterion", ""),
+                        points = rObj.optDouble("points", 0.0)
+                    ))
+                }
+            }
+
+            sectionsList.add(ExamSection(
+                id = sId,
+                title = sTitle,
+                points = sPoints,
+                questions = questionsList,
+                topic = sTopic,
+                rubric = rubricList,
+                modelText = sModelText,
+                gradingNote = sGradingNote
+            ))
+        }
+
+        return ExamData(
+            id = id,
+            component = component,
+            semester = semester,
+            unit = unit,
+            type = type,
+            order = order,
+            title = title,
+            subject = subject,
+            duration = duration,
+            declaredTotal = declaredTotal,
+            noteForTeacher = noteForTeacher,
+            passage = passage,
+            sections = sectionsList
+        )
+    }
+
+    private fun parseJsonArrayToAny(array: JSONArray): List<Any?> {
+        val list = mutableListOf<Any?>()
+        for (i in 0 until array.length()) {
+            val item = array.get(i)
+            when (item) {
+                is JSONObject -> list.add(parseJsonObjectToMap(item))
+                is JSONArray -> list.add(parseJsonArrayToAny(item))
+                else -> list.add(item)
+            }
+        }
+        return list
+    }
+
+    private fun parseJsonObjectToMap(obj: JSONObject): Map<String, Any?> {
+        val map = mutableMapOf<String, Any?>()
+        val keys = obj.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            val value = obj.get(key)
+            when (value) {
+                is JSONObject -> map[key] = parseJsonObjectToMap(value)
+                is JSONArray -> map[key] = parseJsonArrayToAny(value)
+                else -> map[key] = value
+            }
+        }
+        return map
     }
 }

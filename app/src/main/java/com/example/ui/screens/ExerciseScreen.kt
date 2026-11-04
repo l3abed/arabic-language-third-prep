@@ -15,6 +15,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -387,7 +390,7 @@ fun ExerciseScreen(
                             modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
-                            // Target ordered words container
+                            // Target ordered words container (الجملة المركبة)
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(14.dp),
@@ -401,7 +404,7 @@ fun ExerciseScreen(
                                         .padding(16.dp)
                                 ) {
                                     Text(
-                                        text = "الترتيب المركب (انقر على الكلمة لإزالتها):",
+                                        text = "الجملة المركبة (انقر على الكلمة لإزالتها):",
                                         fontSize = 13.sp,
                                         color = TextSecondaryLight
                                     )
@@ -409,31 +412,37 @@ fun ExerciseScreen(
 
                                     if (orderedWords.isEmpty()) {
                                         Text(
-                                            text = "انقر على الكلمات المبعثرة بالترتيب لتكوين الجملة",
+                                            text = "انقر على الكلمات بالترتيب لتكوين الجملة",
                                             fontSize = 14.sp,
                                             color = TextMutedLight
                                         )
                                     } else {
-                                        Row(
+                                        @OptIn(ExperimentalLayoutApi::class)
+                                        FlowRow(
                                             modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
                                             orderedWords.forEach { word ->
                                                 Box(
                                                     modifier = Modifier
-                                                        .clip(RoundedCornerShape(8.dp))
+                                                        .clip(RoundedCornerShape(10.dp))
                                                         .background(PrimaryDarkTeal)
+                                                        .defaultMinSize(minHeight = 44.dp)
                                                         .clickable(enabled = !isAnswerSubmitted) {
                                                             orderedWords.remove(word)
                                                         }
-                                                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                                                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                                                    contentAlignment = Alignment.Center
                                                 ) {
                                                     Text(
                                                         text = TextHelper.formatArabic(word, settings.showTashkeel),
                                                         color = Color.White,
                                                         fontFamily = AmiriFontFamily,
                                                         fontSize = 18.sp,
-                                                        fontWeight = FontWeight.Bold
+                                                        lineHeight = 28.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        textAlign = TextAlign.Center
                                                     )
                                                 }
                                             }
@@ -442,30 +451,58 @@ fun ExerciseScreen(
                                 }
                             }
 
-                            // Source scattered words
+                            // Source scattered words in a 2-column uniform grid (gap: 12dp, min-height: 56dp, padding: 12dp, text-align: center)
                             val availableWords = exercise.words.filter { !orderedWords.contains(it) }
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                availableWords.forEach { word ->
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .border(1.dp, PrimaryDarkTeal, RoundedCornerShape(10.dp))
-                                            .background(MaterialTheme.colorScheme.surface)
-                                            .clickable(enabled = !isAnswerSubmitted) {
-                                                orderedWords.add(word)
+                            if (availableWords.isNotEmpty()) {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    availableWords.chunked(2).forEach { rowWords ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                        ) {
+                                            rowWords.forEach { word ->
+                                                Card(
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .defaultMinSize(minWidth = 120.dp, minHeight = 56.dp)
+                                                        .clip(RoundedCornerShape(12.dp))
+                                                        .border(1.5.dp, PrimaryDarkTeal, RoundedCornerShape(12.dp))
+                                                        .clickable(enabled = !isAnswerSubmitted) {
+                                                            orderedWords.add(word)
+                                                        },
+                                                    shape = RoundedCornerShape(12.dp),
+                                                    colors = CardDefaults.cardColors(
+                                                        containerColor = MaterialTheme.colorScheme.surface
+                                                    ),
+                                                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                                                ) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .defaultMinSize(minHeight = 56.dp)
+                                                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Text(
+                                                            text = TextHelper.formatArabic(word, settings.showTashkeel),
+                                                            fontFamily = AmiriFontFamily,
+                                                            fontSize = 18.sp,
+                                                            lineHeight = 28.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = PrimaryDarkTeal,
+                                                            textAlign = TextAlign.Center,
+                                                            softWrap = true
+                                                        )
+                                                    }
+                                                }
                                             }
-                                            .padding(horizontal = 14.dp, vertical = 10.dp)
-                                    ) {
-                                        Text(
-                                            text = TextHelper.formatArabic(word, settings.showTashkeel),
-                                            fontFamily = AmiriFontFamily,
-                                            fontSize = 18.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = PrimaryDarkTeal
-                                        )
+                                            if (rowWords.size == 1) {
+                                                Spacer(modifier = Modifier.weight(1f))
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -478,7 +515,9 @@ fun ExerciseScreen(
                                         isAnswerCorrect = correct
                                         if (correct) score++
                                     },
-                                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryDarkTeal)
                                 ) {
                                     Text("تأكيد الترتيب", fontWeight = FontWeight.Bold)

@@ -121,8 +121,12 @@ fun HomeScreen(
             ComponentProgressCard(
                 info = info,
                 onClick = {
-                    viewModel.setComponentFilter(info.id)
-                    viewModel.selectTab(NavTab.LESSONS)
+                    if (info.id == "exams") {
+                        viewModel.openExam()
+                    } else {
+                        viewModel.setComponentFilter(info.id)
+                        viewModel.selectTab(NavTab.LESSONS)
+                    }
                 }
             )
         }

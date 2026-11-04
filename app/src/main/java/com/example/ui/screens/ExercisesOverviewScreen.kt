@@ -83,6 +83,75 @@ fun ExercisesOverviewScreen(
             Spacer(modifier = Modifier.height(8.dp))
         }
 
+        // Homework Exam Card
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("exercise_homework_exam_card")
+                    .clickable { viewModel.openExam() },
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = PrimaryDarkTeal),
+                elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(GoldAccent)
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "20 / 20 نقطة",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = PrimaryDarkTeal
+                            )
+                        }
+
+                        Text(
+                            text = "الفرض المنزلي الأول",
+                            color = Color.White,
+                            fontFamily = AmiriFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp
+                        )
+                    }
+
+                    Text(
+                        text = "نص الانطلاق والأسئلة الشاملة مع نموذج التصحيح وسلم التنقيط لجميع المجالات",
+                        color = Color.White.copy(alpha = 0.85f),
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Button(
+                        onClick = { viewModel.openExam() },
+                        modifier = Modifier.fillMaxWidth().height(42.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = GoldAccent,
+                            contentColor = PrimaryDarkTeal
+                        )
+                    ) {
+                        Text("بدء الفرض المنزلي ونموذج الإجابة", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
+                }
+            }
+        }
+
         items(lessons) { lesson ->
             val scoreInfo = viewModel.repository.getExerciseScore(lesson.id)
             ExerciseLessonCard(
