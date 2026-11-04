@@ -40,12 +40,19 @@ jobs:
           fi
           chmod +x gradlew
 
-      - name: Build APK with Gradle
-        run: ./gradlew assembleDebug --stacktrace
+      - name: Build APK and AAB with Gradle
+        run: ./gradlew assembleDebug bundleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug
-          path: app/build/outputs/apk/debug/*.apk
-          retention-days: 7
+            name: app-debug-apk
+            path: app/build/outputs/apk/debug/*.apk
+            retention-days: 7
+
+      - name: Upload AAB (Google Play Store Bundle)
+        uses: actions/upload-artifact@v4
+        with:
+            name: app-debug-bundle
+            path: app/build/outputs/bundle/debug/*.aab
+            retention-days: 7
