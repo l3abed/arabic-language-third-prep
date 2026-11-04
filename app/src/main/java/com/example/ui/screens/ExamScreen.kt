@@ -26,12 +26,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -61,12 +61,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.model.AnswerItem
 import com.example.model.ExamData
 import com.example.model.ExamQuestion
 import com.example.model.ExamSection
 import com.example.model.RubricItem
 import com.example.ui.theme.AmiriFontFamily
 import com.example.ui.theme.BorderLight
+import com.example.ui.theme.ErrorBgLight
+import com.example.ui.theme.ErrorRed
 import com.example.ui.theme.GoldAccent
 import com.example.ui.theme.GoldLight
 import com.example.ui.theme.PrimaryDarkTeal
@@ -87,6 +90,10 @@ fun ExamScreen(viewModel: ArabicAppViewModel) {
     val settings by viewModel.settings.collectAsState()
     val scrollState = rememberScrollState()
 
+    val isSubmitted = viewModel.isExamSubmitted
+    val showCorrection = viewModel.showCorrectionModel
+    val validationError = viewModel.examValidationError
+
     if (exam == null) {
         Box(
             modifier = Modifier
@@ -102,11 +109,6 @@ fun ExamScreen(viewModel: ArabicAppViewModel) {
             )
         }
         return
-    }
-
-    // Dynamic total points calculation from sections: 8 + 6 + 6 = 20
-    val totalPoints = remember(exam) {
-        exam.sections.sumOf { it.points }
     }
 
     Scaffold(
@@ -159,7 +161,7 @@ fun ExamScreen(viewModel: ArabicAppViewModel) {
                                 color = Color.White.copy(alpha = 0.6f)
                             )
                             Text(
-                                text = exam.subject,
+                                text = "اللغة العربية",
                                 fontSize = 12.sp,
                                 color = GoldAccent,
                                 fontWeight = FontWeight.Bold
@@ -179,13 +181,11 @@ fun ExamScreen(viewModel: ArabicAppViewModel) {
                 .padding(horizontal = 16.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Exam Header Card with points badge
+            // Header Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
             ) {
                 Column(
@@ -198,20 +198,37 @@ fun ExamScreen(viewModel: ArabicAppViewModel) {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Total points badge
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(GoldLight.copy(alpha = 0.3f))
-                                .border(1.dp, GoldAccent, RoundedCornerShape(8.dp))
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            Text(
-                                text = "المجموع: $totalPoints / 20 نقطة",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
-                                color = PrimaryDarkTeal
-                            )
+                        if (isSubmitted) {
+                            // Total points badge: displayed only after submission
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(GoldLight.copy(alpha = 0.35f))
+                                    .border(1.dp, GoldAccent, RoundedCornerShape(8.dp))
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "مجموع نقط الفرض: 20 / 20 نقطة",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = PrimaryDarkTeal
+                                )
+                            }
+                        } else {
+                            // Pre-submission status badge
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(PrimaryDarkTeal.copy(alpha = 0.1f))
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "10 أسئلة مطلوبة كاملة",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 13.sp,
+                                    color = PrimaryDarkTeal
+                                )
+                            }
                         }
 
                         Text(
@@ -223,12 +240,82 @@ fun ExamScreen(viewModel: ArabicAppViewModel) {
 
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = "فرض منزلي شامل يغطي مجالات القراءة والفهم، والدرس اللغوي، والتعبير والإنشاء مع نموذج التصحيح وسلم التنقيط.",
+                        text = if (isSubmitted) {
+                            "تم تسليم الفرض ومراجعة إجاباتك مقابل عناصر الإجابة وسلم التنقيط."
+                        } else {
+                            "أجب عن جميع الأسئلة في الخانات المخصصة. لن يظهر نموذج التصحيح وسلم التنقيط إلا بعد الضغط على زر «تسليم الفرض»."
+                        },
                         fontSize = 13.sp,
                         color = TextMutedLight,
                         lineHeight = 20.sp,
                         textAlign = TextAlign.Start
                     )
+                }
+            }
+
+            // Validation Error Alert Banner
+            if (validationError != null) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = ErrorBgLight),
+                    border = androidx.compose.foundation.BorderStroke(1.5.dp, ErrorRed)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ErrorOutline,
+                            contentDescription = null,
+                            tint = ErrorRed,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Text(
+                            text = validationError,
+                            color = ErrorRed,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            lineHeight = 20.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+
+            // Submission Success Banner
+            if (isSubmitted) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F3EE)),
+                    border = androidx.compose.foundation.BorderStroke(1.5.dp, SuccessGreen)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = SuccessGreen,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Text(
+                            text = "تم تسليم الفرض بنجاح! تم فتح نموذج التصحيح وسلم التنقيط لكل سؤال أدناه للمراجعة والتقويم الذاتي.",
+                            color = PrimaryDarkTeal,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            lineHeight = 20.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
 
@@ -240,11 +327,12 @@ fun ExamScreen(viewModel: ArabicAppViewModel) {
                 fontScale = settings.fontScale
             )
 
-            // 2. Sections
-            exam.sections.forEachIndexed { sectionIndex, section ->
+            // 2. Sections (A, B, C)
+            exam.sections.forEach { section ->
                 SectionCard(
                     section = section,
-                    showCorrectionModel = viewModel.showCorrectionModel,
+                    isSubmitted = isSubmitted,
+                    showCorrection = showCorrection,
                     examAnswers = viewModel.examAnswers,
                     onAnswerChange = { key, value ->
                         viewModel.updateExamAnswer(key, value)
@@ -254,59 +342,89 @@ fun ExamScreen(viewModel: ArabicAppViewModel) {
                 )
             }
 
-            // Action Buttons
+            // Bottom Actions
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Button(
-                    onClick = {
-                        viewModel.toggleCorrectionModel()
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                        .testTag("toggle_correction_model_button"),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (viewModel.showCorrectionModel) GoldAccent else PrimaryDarkTeal
-                    )
-                ) {
-                    Icon(
-                        imageVector = if (viewModel.showCorrectionModel) Icons.Default.CheckCircle else Icons.Outlined.CheckCircle,
-                        contentDescription = null,
-                        tint = if (viewModel.showCorrectionModel) PrimaryDarkTeal else Color.White
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = if (viewModel.showCorrectionModel) "إخفاء نموذج التصحيح" else "نموذج التصحيح وعناصر الإجابة",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        color = if (viewModel.showCorrectionModel) PrimaryDarkTeal else Color.White
-                    )
-                }
+                if (!isSubmitted) {
+                    // Primary Submit Button (before submission)
+                    Button(
+                        onClick = {
+                            viewModel.submitExam()
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(54.dp)
+                            .testTag("submit_exam_button"),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryDarkTeal)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Send,
+                            contentDescription = null,
+                            tint = Color.White
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "تسليم الفرض",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp,
+                            color = Color.White
+                        )
+                    }
+                } else {
+                    // After Submission: Equal-width action buttons in a grid row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Button(
+                            onClick = { viewModel.toggleCorrectionModel() },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(52.dp)
+                                .testTag("toggle_correction_model_button"),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (showCorrection) GoldAccent else PrimaryDarkTeal
+                            )
+                        ) {
+                            Text(
+                                text = if (showCorrection) "إخفاء التصحيح" else "عرض التصحيح",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = if (showCorrection) PrimaryDarkTeal else Color.White,
+                                textAlign = TextAlign.Center
+                            )
+                        }
 
-                OutlinedButton(
-                    onClick = { viewModel.resetExam() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .testTag("reset_exam_answers_button"),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Refresh,
-                        contentDescription = null,
-                        tint = TextSecondaryLight
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "إعادة تعيين الإجابات",
-                        color = TextSecondaryLight,
-                        fontSize = 14.sp
-                    )
+                        OutlinedButton(
+                            onClick = { viewModel.resetExam() },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(52.dp)
+                                .testTag("reset_exam_answers_button"),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Refresh,
+                                contentDescription = null,
+                                tint = TextSecondaryLight,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "إعادة المحاولة",
+                                color = TextSecondaryLight,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
                 }
             }
 
@@ -327,9 +445,7 @@ private fun PassageCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(
@@ -409,7 +525,8 @@ private fun PassageCard(
 @Composable
 private fun SectionCard(
     section: ExamSection,
-    showCorrectionModel: Boolean,
+    isSubmitted: Boolean,
+    showCorrection: Boolean,
     examAnswers: Map<String, String>,
     onAnswerChange: (String, String) -> Unit,
     showTashkeel: Boolean,
@@ -418,9 +535,7 @@ private fun SectionCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(
@@ -435,19 +550,23 @@ private fun SectionCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Section Points Badge
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(PrimaryDarkTeal.copy(alpha = 0.1f))
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        text = "${section.points} نقط",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                        color = PrimaryDarkTeal
-                    )
+                // Points badge displayed only after submission
+                if (isSubmitted) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(PrimaryDarkTeal.copy(alpha = 0.12f))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "${section.points} نقط",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = PrimaryDarkTeal
+                        )
+                    }
+                } else {
+                    Spacer(modifier = Modifier.width(4.dp))
                 }
 
                 Text(
@@ -462,28 +581,34 @@ private fun SectionCard(
 
             HorizontalDivider(color = BorderLight)
 
-            // Section Questions
+            // Questions in Section A and B
             section.questions.forEach { question ->
                 val answerKey = "${section.id}_q${question.no}"
                 val currentAnswer = examAnswers[answerKey] ?: ""
 
-                QuestionItem(
+                QuestionCard(
                     sectionId = section.id,
                     question = question,
                     studentAnswer = currentAnswer,
+                    isSubmitted = isSubmitted,
+                    showCorrection = showCorrection,
                     onAnswerChange = { onAnswerChange(answerKey, it) },
-                    showCorrectionModel = showCorrectionModel,
                     showTashkeel = showTashkeel,
                     fontScale = fontScale
                 )
             }
 
-            // If Section C, show rubric and model_text if applicable
-            if (section.rubric.isNotEmpty()) {
-                RubricSection(
-                    rubric = section.rubric,
-                    modelText = section.modelText,
-                    showCorrectionModel = showCorrectionModel,
+            // Section C (Expression / Writing)
+            if (section.id == "C" || section.topic != null) {
+                val writingKey = "${section.id}_writing"
+                val studentWriting = examAnswers[writingKey] ?: ""
+
+                WritingSectionCard(
+                    section = section,
+                    studentWriting = studentWriting,
+                    isSubmitted = isSubmitted,
+                    showCorrection = showCorrection,
+                    onWritingChange = { onAnswerChange(writingKey, it) },
                     fontScale = fontScale
                 )
             }
@@ -492,12 +617,13 @@ private fun SectionCard(
 }
 
 @Composable
-private fun QuestionItem(
+private fun QuestionCard(
     sectionId: String,
     question: ExamQuestion,
     studentAnswer: String,
+    isSubmitted: Boolean,
+    showCorrection: Boolean,
     onAnswerChange: (String) -> Unit,
-    showCorrectionModel: Boolean,
     showTashkeel: Boolean,
     fontScale: Float
 ) {
@@ -509,24 +635,28 @@ private fun QuestionItem(
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // Question Header: No & Points
+        // Question Header: Number and points (points visible after submission)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(GoldAccent.copy(alpha = 0.25f))
-                    .padding(horizontal = 8.dp, vertical = 2.dp)
-            ) {
-                Text(
-                    text = "${question.points} ن",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = PrimaryDarkTeal
-                )
+            if (isSubmitted) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(GoldAccent.copy(alpha = 0.25f))
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "${question.points} ن",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryDarkTeal
+                    )
+                }
+            } else {
+                Spacer(modifier = Modifier.width(4.dp))
             }
 
             Row(
@@ -547,7 +677,7 @@ private fun QuestionItem(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "${question.no}",
+                        text = question.no,
                         fontSize = 12.sp,
                         color = Color.White,
                         fontWeight = FontWeight.Bold
@@ -556,7 +686,7 @@ private fun QuestionItem(
             }
         }
 
-        // Question Prompt
+        // Question Prompt in Arabic
         Text(
             text = TextHelper.formatArabic(question.prompt, showTashkeel),
             fontFamily = AmiriFontFamily,
@@ -568,10 +698,11 @@ private fun QuestionItem(
             modifier = Modifier.fillMaxWidth()
         )
 
-        // Student Answer Input Field
+        // Student Answer Field
         OutlinedTextField(
             value = studentAnswer,
             onValueChange = onAnswerChange,
+            enabled = !isSubmitted,
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag("exam_answer_${sectionId}_${question.no}"),
@@ -586,9 +717,11 @@ private fun QuestionItem(
             shape = RoundedCornerShape(10.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = PrimaryDarkTeal,
-                unfocusedBorderColor = BorderLight,
+                unfocusedBorderColor = if (studentAnswer.isNotBlank()) PrimaryDarkTeal.copy(alpha = 0.5f) else BorderLight,
                 focusedContainerColor = MaterialTheme.colorScheme.surface,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                disabledContainerColor = MaterialTheme.colorScheme.surface,
+                disabledTextColor = MaterialTheme.colorScheme.onSurface
             ),
             textStyle = androidx.compose.ui.text.TextStyle(
                 fontFamily = AmiriFontFamily,
@@ -599,14 +732,14 @@ private fun QuestionItem(
             minLines = if (question.points >= 2.0) 3 else 1
         )
 
-        // Correction Model Display
+        // Model Answer displayed ONLY after submission
         AnimatedVisibility(
-            visible = showCorrectionModel,
+            visible = isSubmitted && showCorrection,
             enter = fadeIn() + expandVertically(),
             exit = fadeOut() + shrinkVertically()
         ) {
-            CorrectionModelCard(
-                modelRaw = question.modelRaw,
+            QuestionCorrectionCard(
+                answerGroups = question.answerGroups,
                 grading = question.grading,
                 fontScale = fontScale
             )
@@ -615,17 +748,15 @@ private fun QuestionItem(
 }
 
 @Composable
-private fun CorrectionModelCard(
-    modelRaw: Any?,
-    grading: String?,
+private fun QuestionCorrectionCard(
+    answerGroups: List<List<AnswerItem>>,
+    grading: String,
     fontScale: Float
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(10.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFE8F3EE)
-        ),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F3EE)),
         border = androidx.compose.foundation.BorderStroke(1.dp, SuccessGreen.copy(alpha = 0.5f))
     ) {
         Column(
@@ -648,104 +779,80 @@ private fun CorrectionModelCard(
                 Text(
                     text = "عناصر الإجابة النموذجية:",
                     fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
+                    fontSize = 14.sp,
                     color = PrimaryDarkTeal
                 )
             }
 
-            // Render model based on type: String -> paragraph; List -> bullet list; Map -> labeled fields
-            when (modelRaw) {
-                is String -> {
-                    Text(
-                        text = modelRaw,
-                        fontFamily = AmiriFontFamily,
-                        fontSize = (16 * fontScale).sp,
-                        lineHeight = (25 * fontScale).sp,
-                        color = Color(0xFF133E32),
-                        textAlign = TextAlign.Start,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
+            // Render each answer group as a clean card without any English keys or symbols
+            answerGroups.forEach { group ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.85f))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        group.forEach { item ->
+                            val hasLabel = item.label.isNotBlank()
+                            val hasValue = item.value.isNotBlank()
 
-                is List<*> -> {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        modelRaw.forEach { item ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.Top
-                            ) {
-                                Text(
-                                    text = item?.toString() ?: "",
-                                    fontFamily = AmiriFontFamily,
-                                    fontSize = (15 * fontScale).sp,
-                                    lineHeight = (24 * fontScale).sp,
-                                    color = Color(0xFF133E32),
-                                    textAlign = TextAlign.Start,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Text(
-                                    text = "•",
-                                    color = SuccessGreen,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 16.sp
-                                )
-                            }
-                        }
-                    }
-                }
-
-                is Map<*, *> -> {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        modelRaw.forEach { (k, v) ->
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(8.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = Color.White.copy(alpha = 0.8f)
-                                )
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
+                            when {
+                                !hasLabel && hasValue -> {
+                                    // Empty label: show value only
                                     Text(
-                                        text = v?.toString() ?: "",
+                                        text = item.value,
                                         fontFamily = AmiriFontFamily,
                                         fontSize = (15 * fontScale).sp,
+                                        lineHeight = (23 * fontScale).sp,
                                         color = Color(0xFF133E32),
-                                        fontWeight = FontWeight.Bold,
-                                        textAlign = TextAlign.Start,
-                                        modifier = Modifier.weight(1f)
+                                        modifier = Modifier.fillMaxWidth()
                                     )
+                                }
+
+                                hasLabel && !hasValue -> {
+                                    // Empty value: show label only as heading
                                     Text(
-                                        text = "${k}:",
-                                        fontSize = 13.sp,
+                                        text = item.label,
                                         fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
                                         color = PrimaryDarkTeal,
-                                        modifier = Modifier.padding(start = 8.dp)
+                                        modifier = Modifier.fillMaxWidth()
                                     )
+                                }
+
+                                hasLabel && hasValue -> {
+                                    // Both exist: show label then value
+                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                        Text(
+                                            text = item.label,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            color = PrimaryDarkTeal
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = item.value,
+                                            fontFamily = AmiriFontFamily,
+                                            fontSize = (15 * fontScale).sp,
+                                            lineHeight = (23 * fontScale).sp,
+                                            color = Color(0xFF133E32),
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                 }
-
-                else -> {
-                    Text(
-                        text = modelRaw?.toString() ?: "",
-                        fontFamily = AmiriFontFamily,
-                        fontSize = (15 * fontScale).sp,
-                        color = Color(0xFF133E32)
-                    )
-                }
             }
 
-            // Grading criteria / سلم التنقيط
-            if (!grading.isNullOrBlank()) {
+            // Grading criteria
+            if (grading.isNotBlank()) {
                 HorizontalDivider(color = SuccessGreen.copy(alpha = 0.3f), modifier = Modifier.padding(vertical = 4.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -753,18 +860,17 @@ private fun CorrectionModelCard(
                     verticalAlignment = Alignment.Top
                 ) {
                     Text(
-                        text = grading,
-                        fontSize = 12.sp,
-                        color = TextSecondaryLight,
-                        lineHeight = 18.sp,
-                        textAlign = TextAlign.Start,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Text(
                         text = "سلم التنقيط:",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryDarkTeal
+                    )
+                    Text(
+                        text = grading,
+                        fontSize = 12.sp,
+                        color = TextSecondaryLight,
+                        lineHeight = 18.sp,
+                        modifier = Modifier.weight(1f)
                     )
                 }
             }
@@ -773,10 +879,12 @@ private fun CorrectionModelCard(
 }
 
 @Composable
-private fun RubricSection(
-    rubric: List<RubricItem>,
-    modelText: String?,
-    showCorrectionModel: Boolean,
+private fun WritingSectionCard(
+    section: ExamSection,
+    studentWriting: String,
+    isSubmitted: Boolean,
+    showCorrection: Boolean,
+    onWritingChange: (String) -> Unit,
     fontScale: Float
 ) {
     Column(
@@ -792,123 +900,204 @@ private fun RubricSection(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(GoldAccent.copy(alpha = 0.25f))
-                    .padding(horizontal = 8.dp, vertical = 2.dp)
-            ) {
-                Text(
-                    text = "6 نقط",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = PrimaryDarkTeal
-                )
+            if (isSubmitted) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(GoldAccent.copy(alpha = 0.25f))
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "${section.points} ن",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryDarkTeal
+                    )
+                }
+            } else {
+                Spacer(modifier = Modifier.width(4.dp))
             }
 
             Text(
-                text = "معايير تقويم التعبير والإنشاء",
-                fontFamily = AmiriFontFamily,
+                text = "موضوع الإنشاء المطلوب",
+                fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
-                fontSize = 16.sp,
                 color = PrimaryDarkTeal
             )
         }
 
-        // Rubric Items Table
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            rubric.forEach { item ->
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(PrimaryDarkTeal.copy(alpha = 0.1f))
-                                .padding(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = "${item.points} ن",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                color = PrimaryDarkTeal
-                            )
-                        }
-
-                        Text(
-                            text = item.criterion,
-                            fontSize = 14.sp,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontWeight = FontWeight.Medium,
-                            textAlign = TextAlign.End,
-                            modifier = Modifier.weight(1f).padding(start = 8.dp)
-                        )
-                    }
-                }
-            }
+        // Topic Prompt
+        section.topic?.let { topic ->
+            Text(
+                text = topic,
+                fontFamily = AmiriFontFamily,
+                fontSize = (17 * fontScale).sp,
+                lineHeight = (26 * fontScale).sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
 
-        // Model Text for Expression / الإنشاء النموذجية
+        // Student Writing Textarea
+        OutlinedTextField(
+            value = studentWriting,
+            onValueChange = onWritingChange,
+            enabled = !isSubmitted,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("exam_answer_C_writing"),
+            placeholder = {
+                Text(
+                    text = "اكتب نص اليومية هنا (من 8 إلى 10 أسطر)...",
+                    fontFamily = AmiriFontFamily,
+                    fontSize = 15.sp,
+                    color = TextMutedLight
+                )
+            },
+            shape = RoundedCornerShape(10.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = PrimaryDarkTeal,
+                unfocusedBorderColor = if (studentWriting.isNotBlank()) PrimaryDarkTeal.copy(alpha = 0.5f) else BorderLight,
+                focusedContainerColor = MaterialTheme.colorScheme.surface,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                disabledContainerColor = MaterialTheme.colorScheme.surface,
+                disabledTextColor = MaterialTheme.colorScheme.onSurface
+            ),
+            textStyle = androidx.compose.ui.text.TextStyle(
+                fontFamily = AmiriFontFamily,
+                fontSize = (16 * fontScale).sp,
+                lineHeight = (26 * fontScale).sp,
+                textAlign = TextAlign.Start,
+                color = MaterialTheme.colorScheme.onSurface
+            ),
+            minLines = 7
+        )
+
+        // Rubric & Model Text: strictly shown only AFTER submission
         AnimatedVisibility(
-            visible = showCorrectionModel && !modelText.isNullOrBlank(),
+            visible = isSubmitted && showCorrection,
             enter = fadeIn() + expandVertically(),
             exit = fadeOut() + shrinkVertically()
         ) {
-            Card(
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(10.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F3EE)),
-                border = androidx.compose.foundation.BorderStroke(1.dp, SuccessGreen.copy(alpha = 0.5f))
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                // Rubric Card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F3EE)),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, SuccessGreen.copy(alpha = 0.5f))
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.CheckCircle,
-                            contentDescription = null,
-                            tint = SuccessGreen,
-                            modifier = Modifier.size(18.dp)
-                        )
                         Text(
-                            text = "نص إنشائي نموذجي (يسترشد به المتعلم):",
+                            text = "معايير تقويم التعبير والإنشاء (سلم التنقيط - 6 نقط):",
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
                             color = PrimaryDarkTeal
                         )
-                    }
 
-                    Text(
-                        text = modelText ?: "",
-                        fontFamily = AmiriFontFamily,
-                        fontSize = (16 * fontScale).sp,
-                        lineHeight = (27 * fontScale).sp,
-                        color = Color(0xFF133E32),
-                        textAlign = TextAlign.Justify,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                        section.rubric.forEach { item ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.85f))
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(PrimaryDarkTeal.copy(alpha = 0.12f))
+                                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = "${item.points} ن",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            color = PrimaryDarkTeal
+                                        )
+                                    }
+
+                                    Text(
+                                        text = item.criterion,
+                                        fontSize = 13.sp,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.weight(1f).padding(start = 8.dp),
+                                        textAlign = TextAlign.End
+                                    )
+                                }
+                            }
+                        }
+
+                        section.gradingNote?.let { note ->
+                            HorizontalDivider(color = SuccessGreen.copy(alpha = 0.3f), modifier = Modifier.padding(vertical = 4.dp))
+                            Text(
+                                text = "ملاحظة: $note",
+                                fontSize = 12.sp,
+                                color = TextSecondaryLight,
+                                lineHeight = 18.sp
+                            )
+                        }
+                    }
+                }
+
+                // Model Text
+                section.modelText?.let { model ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F3EE)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, SuccessGreen.copy(alpha = 0.5f))
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.CheckCircle,
+                                    contentDescription = null,
+                                    tint = SuccessGreen,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    text = "نص إنشائي نموذجي (للاسترشاد):",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = PrimaryDarkTeal
+                                )
+                            }
+
+                            Text(
+                                text = model,
+                                fontFamily = AmiriFontFamily,
+                                fontSize = (16 * fontScale).sp,
+                                lineHeight = (27 * fontScale).sp,
+                                color = Color(0xFF133E32),
+                                textAlign = TextAlign.Justify,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
                 }
             }
         }

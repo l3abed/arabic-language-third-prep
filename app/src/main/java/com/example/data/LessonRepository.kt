@@ -451,14 +451,27 @@ class LessonRepository(private val context: Context) {
                     val points = qObj.optDouble("points", 0.0)
                     val prompt = qObj.optString("prompt", "")
                     val grading = qObj.optString("grading", "")
-                    val modelRaw: Any? = when {
-                        qObj.isNull("model") -> null
-                        qObj.optString("model", null) != null && qObj.get("model") is String -> qObj.getString("model")
-                        qObj.optJSONArray("model") != null -> parseJsonArrayToAny(qObj.getJSONArray("model"))
-                        qObj.optJSONObject("model") != null -> parseJsonObjectToMap(qObj.getJSONObject("model"))
-                        else -> qObj.opt("model")
+                    val answerGroupsList = mutableListOf<List<com.example.model.AnswerItem>>()
+                    val agArray = qObj.optJSONArray("answer_groups")
+                    if (agArray != null) {
+                        for (g in 0 until agArray.length()) {
+                            val groupArray = agArray.optJSONArray(g)
+                            if (groupArray != null) {
+                                val groupItems = mutableListOf<com.example.model.AnswerItem>()
+                                for (idx in 0 until groupArray.length()) {
+                                    val itemObj = groupArray.getJSONObject(idx)
+                                    groupItems.add(
+                                        com.example.model.AnswerItem(
+                                            label = itemObj.optString("label", ""),
+                                            value = itemObj.optString("value", "")
+                                        )
+                                    )
+                                }
+                                answerGroupsList.add(groupItems)
+                            }
+                        }
                     }
-                    questionsList.add(ExamQuestion(no, points, prompt, modelRaw, grading))
+                    questionsList.add(ExamQuestion(no, points, prompt, grading, answerGroupsList))
                 }
             }
 

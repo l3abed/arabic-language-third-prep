@@ -32,5 +32,6 @@ class ExampleUnitTest {
         assertTrue(content.contains("\"id\": \"A\"") || content.contains("\"id\":\"A\""))
         assertTrue(content.contains("\"id\": \"B\"") || content.contains("\"id\":\"B\""))
         assertTrue(content.contains("\"id\": \"C\"") || content.contains("\"id\":\"C\""))
+        assertTrue(content.contains("answer_groups"))
     }
 }

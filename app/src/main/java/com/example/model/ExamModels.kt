@@ -39,8 +39,13 @@ data class ExamQuestion(
     val no: String,
     val points: Double,
     val prompt: String,
-    val modelRaw: Any?,
-    val grading: String
+    val grading: String,
+    val answerGroups: List<List<AnswerItem>> = emptyList()
+)
+
+data class AnswerItem(
+    val label: String = "",
+    val value: String = ""
 )
 
 data class RubricItem(

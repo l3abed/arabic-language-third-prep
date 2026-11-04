@@ -41,6 +41,7 @@ class ArabicAppViewModel(application: Application) : AndroidViewModel(applicatio
     val examAnswers = androidx.compose.runtime.mutableStateMapOf<String, String>()
     var isExamSubmitted by androidx.compose.runtime.mutableStateOf(false)
     var showCorrectionModel by androidx.compose.runtime.mutableStateOf(false)
+    var examValidationError by androidx.compose.runtime.mutableStateOf<String?>(null)
 
     private val _currentTab = MutableStateFlow(NavTab.HOME)
     val currentTab: StateFlow<NavTab> = _currentTab.asStateFlow()
@@ -178,26 +179,66 @@ class ArabicAppViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun openExam() {
+        if (!isExamSubmitted) {
+            showCorrectionModel = false
+        }
+        examValidationError = null
         _activeScreen.value = ActiveScreen.EXAM_VIEW
     }
 
     fun updateExamAnswer(key: String, text: String) {
         examAnswers[key] = text
+        if (examValidationError != null) {
+            examValidationError = null
+        }
     }
 
-    fun submitExam() {
+    fun validateExamSubmission(): String? {
+        val exam = homeworkExam ?: return null
+        for (section in exam.sections) {
+            for (q in section.questions) {
+                val key = "${section.id}_q${q.no}"
+                val ans = examAnswers[key]
+                if (ans.isNullOrBlank()) {
+                    return "يرجى الإجابة عن السؤال ${q.no} في «${section.title}» قبل تسليم الفرض."
+                }
+            }
+            if (section.id == "C" || section.topic != null) {
+                val key = "${section.id}_writing"
+                val ans = examAnswers[key]
+                if (ans.isNullOrBlank()) {
+                    return "يرجى كتابة موضوع الإنشاء في «${section.title}» قبل تسليم الفرض."
+                }
+            }
+        }
+        return null
+    }
+
+    fun submitExam(): Boolean {
+        val error = validateExamSubmission()
+        if (error != null) {
+            examValidationError = error
+            isExamSubmitted = false
+            showCorrectionModel = false
+            return false
+        }
+        examValidationError = null
         isExamSubmitted = true
         showCorrectionModel = true
+        return true
     }
 
     fun toggleCorrectionModel() {
-        showCorrectionModel = !showCorrectionModel
+        if (isExamSubmitted) {
+            showCorrectionModel = !showCorrectionModel
+        }
     }
 
     fun resetExam() {
         examAnswers.clear()
         isExamSubmitted = false
         showCorrectionModel = false
+        examValidationError = null
     }
 
     override fun onCleared() {
