@@ -1,0 +1,6 @@
+{
+  "name": "العربية — الثالثة إعدادي",
+  "description": "تطبيق مراجعة دروس اللغة العربية للسنة الثالثة إعدادي",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
