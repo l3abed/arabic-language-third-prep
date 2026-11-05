@@ -3,9 +3,11 @@ package com.example.ui.screens
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,6 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Lightbulb
@@ -72,10 +75,6 @@ fun LessonDetailScreen(
     viewModel: ArabicAppViewModel,
     modifier: Modifier = Modifier
 ) {
-    BackHandler {
-        viewModel.navigateBackToTabs()
-    }
-
     val activeLessonId by viewModel.activeLessonId.collectAsState()
     val lessons by viewModel.lessons.collectAsState()
     val settings by viewModel.settings.collectAsState()
@@ -83,6 +82,9 @@ fun LessonDetailScreen(
     val lesson = lessons.firstOrNull { it.id == activeLessonId }
 
     if (lesson == null || lesson.cards.isEmpty()) {
+        BackHandler {
+            viewModel.navigateBackToTabs()
+        }
         Box(
             modifier = modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
@@ -96,8 +98,18 @@ fun LessonDetailScreen(
         mutableIntStateOf(viewModel.repository.getLessonProgress(lesson.id).coerceIn(0, lesson.cards.size - 1))
     }
 
+    val scrollState = rememberScrollState()
+
+    BackHandler {
+        viewModel.navigateBackToTabs()
+    }
+
     LaunchedEffect(currentCardIndex) {
+        scrollState.scrollTo(0)
         viewModel.repository.saveLessonProgress(lesson.id, currentCardIndex)
+        if (currentCardIndex >= lesson.cards.size - 1) {
+            viewModel.repository.markCardsCompleted(lesson.id)
+        }
     }
 
     val card = lesson.cards[currentCardIndex]
@@ -174,7 +186,7 @@ fun LessonDetailScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Segmented Progress Bar
+            // Segmented Progress Bar (clickable to jump between cards)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -186,9 +198,10 @@ fun LessonDetailScreen(
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .height(6.dp)
-                            .clip(RoundedCornerShape(3.dp))
+                            .height(10.dp)
+                            .clip(RoundedCornerShape(5.dp))
                             .background(if (isPastOrCurrent) PrimaryDarkTeal else Color(0xFFD1DCDB))
+                            .clickable { currentCardIndex = i }
                     )
                 }
             }
@@ -199,7 +212,7 @@ fun LessonDetailScreen(
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .verticalScroll(rememberScrollState()),
+                    .verticalScroll(scrollState),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 RenderCardContent(
@@ -210,41 +223,72 @@ fun LessonDetailScreen(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // Bottom Buttons Bar
+            // Bottom Buttons Bar with compact icon buttons for navigation + prominent "تدرّب الآن"
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // "التالي" Button (Outlined)
+                // زر الرجوع بين البطاقات فقط (أيقونة لتوفير المساحة)
+                OutlinedButton(
+                    onClick = {
+                        if (currentCardIndex > 0) {
+                            currentCardIndex--
+                        }
+                    },
+                    enabled = currentCardIndex > 0,
+                    modifier = Modifier
+                        .size(52.dp)
+                        .testTag("bottom_back_button"),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = PrimaryDarkTeal,
+                        disabledContentColor = Color.LightGray.copy(alpha = 0.5f)
+                    ),
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "البطاقة السابقة",
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+
+                // زر التالي بين البطاقات (أيقونة لتوفير المساحة)
                 OutlinedButton(
                     onClick = {
                         if (currentCardIndex < totalCards - 1) {
                             currentCardIndex++
                         } else {
-                            viewModel.openExercise(lesson.id)
+                            viewModel.repository.markCardsCompleted(lesson.id)
+                            viewModel.navigateBackToTabs()
                         }
                     },
                     modifier = Modifier
-                        .weight(1f)
-                        .height(52.dp)
+                        .size(52.dp)
                         .testTag("next_step_button"),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = PrimaryDarkTeal
-                    )
+                    ),
+                    contentPadding = PaddingValues(0.dp)
                 ) {
-                    Text(
-                        text = if (currentCardIndex < totalCards - 1) "التالي" else "إنهاء الشرح",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
+                    Icon(
+                        imageVector = if (currentCardIndex < totalCards - 1)
+                            Icons.AutoMirrored.Filled.ArrowForward
+                        else
+                            Icons.Outlined.Check,
+                        contentDescription = if (currentCardIndex < totalCards - 1) "البطاقة التالية" else "إنهاء الشرح",
+                        modifier = Modifier.size(24.dp)
                     )
                 }
 
-                // "تدرّب الآن" Button (Dark Teal filled) - launches exercises for this lesson!
+                // زر "تدرّب الآن"
                 Button(
                     onClick = {
+                        viewModel.repository.markCardsCompleted(lesson.id)
                         viewModel.openExercise(lesson.id)
                     },
                     modifier = Modifier
@@ -255,7 +299,8 @@ fun LessonDetailScreen(
                     colors = ButtonDefaults.buttonColors(
                         containerColor = PrimaryDarkTeal,
                         contentColor = Color.White
-                    )
+                    ),
+                    contentPadding = PaddingValues(horizontal = 12.dp)
                 ) {
                     Text(
                         text = "تدرّب الآن",

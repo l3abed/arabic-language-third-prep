@@ -52,7 +52,10 @@ class ArabicAppViewModel(application: Application) : AndroidViewModel(applicatio
     private val _activeLessonId = MutableStateFlow<String?>(null)
     val activeLessonId: StateFlow<String?> = _activeLessonId.asStateFlow()
 
-    // Filter states for lessons screen
+    // Filter states for lessons screen & home screen
+    private val _selectedUnit = MutableStateFlow<Int?>(1) // Default: Unit 1 (الوحدة الأولى)
+    val selectedUnit: StateFlow<Int?> = _selectedUnit.asStateFlow()
+
     private val _selectedSemester = MutableStateFlow<Int?>(null) // null = all
     val selectedSemester: StateFlow<Int?> = _selectedSemester.asStateFlow()
 
@@ -65,18 +68,24 @@ class ArabicAppViewModel(application: Application) : AndroidViewModel(applicatio
 
     val componentInfos: StateFlow<List<ComponentInfo>> = combine(
         lessons,
-        completedLessons
-    ) { _, _ ->
-        repository.getComponentInfos()
+        completedLessons,
+        _selectedUnit
+    ) { _, _, unit ->
+        repository.getComponentInfos(unit)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val resumeLesson: StateFlow<Lesson?> = combine(
         lessons,
         completedLessons,
+        _selectedUnit,
         _activeLessonId
-    ) { _, _, _ ->
-        repository.getResumeLesson()
+    ) { _, _, unit, _ ->
+        repository.getResumeLesson(unit)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    fun setUnitFilter(unit: Int?) {
+        _selectedUnit.value = unit
+    }
 
     fun selectTab(tab: NavTab) {
         _currentTab.value = tab

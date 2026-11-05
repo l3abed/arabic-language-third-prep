@@ -39,7 +39,12 @@ data class Lesson(
         }
 
     val unitDisplayName: String
-        get() = "الوحدة $unit"
+        get() = when (unit) {
+            1 -> "الوحدة الأولى"
+            2 -> "الوحدة الثانية"
+            3 -> "الوحدة الثالثة"
+            else -> "الوحدة $unit"
+        }
 }
 
 sealed class CardItem {

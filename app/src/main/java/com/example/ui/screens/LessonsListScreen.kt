@@ -37,6 +37,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -63,18 +64,20 @@ fun LessonsListScreen(
 ) {
     val lessons by viewModel.lessons.collectAsState()
     val completedLessons by viewModel.completedLessons.collectAsState()
-    val selectedSemester by viewModel.selectedSemester.collectAsState()
+    val selectedUnit by viewModel.selectedUnit.collectAsState()
     val selectedComponentId by viewModel.selectedComponentId.collectAsState()
     val settings by viewModel.settings.collectAsState()
     val componentInfos by viewModel.componentInfos.collectAsState()
 
-    val filteredLessons = lessons
-        .filter { lesson ->
-            val matchesSemester = (selectedSemester == null || lesson.semester == selectedSemester)
-            val matchesComponent = (selectedComponentId == null || lesson.component == selectedComponentId)
-            matchesSemester && matchesComponent
-        }
-        .sortedWith(compareBy({ it.component }, { it.semester }, { it.unit }, { it.order }))
+    val filteredLessons = remember(lessons, selectedUnit, selectedComponentId) {
+        lessons
+            .filter { lesson ->
+                val matchesUnit = (selectedUnit == null || lesson.unit == selectedUnit)
+                val matchesComponent = (selectedComponentId == null || lesson.component == selectedComponentId)
+                matchesUnit && matchesComponent
+            }
+            .sortedWith(compareBy({ it.unit }, { it.component }, { it.order }))
+    }
 
     Column(
         modifier = modifier
@@ -93,7 +96,7 @@ fun LessonsListScreen(
         )
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Semester Filter Chips
+        // Unit Filter Chips: Default is Unit 1 (الوحدة الأولى)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -101,19 +104,19 @@ fun LessonsListScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             FilterChipItem(
-                label = "كافة الدورات",
-                isSelected = selectedSemester == null,
-                onClick = { viewModel.setSemesterFilter(null) }
+                label = "الوحدة الأولى: القيم الإسلامية",
+                isSelected = selectedUnit == 1,
+                onClick = { viewModel.setUnitFilter(1) }
             )
             FilterChipItem(
-                label = "الدورة الأولى",
-                isSelected = selectedSemester == 1,
-                onClick = { viewModel.setSemesterFilter(1) }
+                label = "الوحدة الثالثة: الحضارية",
+                isSelected = selectedUnit == 3,
+                onClick = { viewModel.setUnitFilter(3) }
             )
             FilterChipItem(
-                label = "الدورة الثانية",
-                isSelected = selectedSemester == 2,
-                onClick = { viewModel.setSemesterFilter(2) }
+                label = "كافة الوحدات",
+                isSelected = selectedUnit == null,
+                onClick = { viewModel.setUnitFilter(null) }
             )
         }
 
@@ -299,14 +302,17 @@ fun LessonsListScreen(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                items(filteredLessons) { lesson ->
+                items(filteredLessons.size) { index ->
+                    val lesson = filteredLessons[index]
                     val isCompleted = completedLessons.contains(lesson.id)
                     val scoreInfo = viewModel.repository.getExerciseScore(lesson.id)
+                    val progress = viewModel.repository.getLessonCombinedProgress(lesson)
 
                     LessonItemCard(
                         lesson = lesson,
                         isCompleted = isCompleted,
                         scoreInfo = scoreInfo,
+                        progress = progress,
                         showTashkeel = settings.showTashkeel,
                         onOpenLesson = { viewModel.openLesson(lesson.id) },
                         onOpenExercise = { viewModel.openExercise(lesson.id) }
@@ -352,6 +358,7 @@ private fun LessonItemCard(
     lesson: Lesson,
     isCompleted: Boolean,
     scoreInfo: Pair<Int, Int>?,
+    progress: Float,
     showTashkeel: Boolean,
     onOpenLesson: () -> Unit,
     onOpenExercise: () -> Unit
@@ -400,9 +407,9 @@ private fun LessonItemCard(
                         lesson.tag?.let { tagText ->
                             Box(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(PrimaryDarkTeal.copy(alpha = 0.08f))
-                                    .padding(horizontal = 7.dp, vertical = 3.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(PrimaryDarkTeal.copy(alpha = 0.08f))
+                                .padding(horizontal = 7.dp, vertical = 3.dp)
                             ) {
                                 Text(
                                     text = tagText,
@@ -445,7 +452,7 @@ private fun LessonItemCard(
                 }
 
                 // Completion status icon
-                if (isCompleted) {
+                if (isCompleted || progress >= 1f) {
                     Box(
                         modifier = Modifier
                             .size(32.dp)
@@ -495,6 +502,47 @@ private fun LessonItemCard(
                         fontWeight = FontWeight.Bold,
                         color = if (scoreInfo.first >= scoreInfo.second / 2) SuccessGreen else GoldAccent
                     )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Progress bar on each lesson card
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "نسبة الإنجاز:",
+                        fontSize = 11.sp,
+                        color = TextSecondaryLight
+                    )
+                    Text(
+                        text = "${(progress * 100).toInt()}%",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (progress >= 1f) SuccessGreen else PrimaryDarkTeal
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(Color(0xFFE2ECE9))
+                ) {
+                    if (progress > 0f) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(progress.coerceIn(0.04f, 1f))
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(if (progress >= 1f) SuccessGreen else PrimaryDarkTeal)
+                        )
+                    }
                 }
             }
 

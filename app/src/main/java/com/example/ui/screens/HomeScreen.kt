@@ -2,6 +2,8 @@ package com.example.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,12 +13,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,6 +39,7 @@ import androidx.compose.ui.unit.sp
 import com.example.model.ComponentInfo
 import com.example.model.Lesson
 import com.example.ui.theme.AmiriFontFamily
+import com.example.ui.theme.AmiriQuranFontFamily
 import com.example.ui.theme.GoldAccent
 import com.example.ui.theme.PrimaryDarkTeal
 import com.example.ui.theme.PrimaryDarkTealLight
@@ -42,6 +49,18 @@ import com.example.util.TextHelper
 import com.example.viewmodel.ArabicAppViewModel
 import com.example.viewmodel.NavTab
 
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.outlined.MenuBook
+import androidx.compose.material.icons.outlined.Quiz
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.layout.ContentScale
+import com.example.ui.theme.GoldLight
+import com.example.ui.theme.SuccessGreen
+
 @Composable
 fun HomeScreen(
     viewModel: ArabicAppViewModel,
@@ -49,7 +68,9 @@ fun HomeScreen(
 ) {
     val resumeLesson by viewModel.resumeLesson.collectAsState()
     val componentInfos by viewModel.componentInfos.collectAsState()
+    val allLessons by viewModel.lessons.collectAsState()
     val completedLessons by viewModel.completedLessons.collectAsState()
+    val selectedUnit by viewModel.selectedUnit.collectAsState()
     val settings by viewModel.settings.collectAsState()
 
     LazyColumn(
@@ -60,21 +81,78 @@ fun HomeScreen(
     ) {
         item {
             Spacer(modifier = Modifier.height(16.dp))
-            // Greeting Header
+            // Basmala Header
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    text = "السلام عليكم",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondaryLight,
-                    fontSize = 15.sp
+                    text = "بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ",
+                    fontFamily = AmiriQuranFontFamily,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = PrimaryDarkTeal,
+                    lineHeight = 34.sp
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = "العربية • الثالثة إعدادي",
                     style = MaterialTheme.typography.displayMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground,
                     fontSize = 24.sp
+                )
+            }
+        }
+
+        // Unit Filter Chips in Home: Default is Unit 1
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = selectedUnit == 1,
+                    onClick = { viewModel.setUnitFilter(1) },
+                    label = {
+                        Text(
+                            text = "الوحدة الأولى: القيم الإسلامية",
+                            fontWeight = if (selectedUnit == 1) FontWeight.Bold else FontWeight.Normal
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = PrimaryDarkTeal,
+                        selectedLabelColor = Color.White
+                    )
+                )
+
+                FilterChip(
+                    selected = selectedUnit == 3,
+                    onClick = { viewModel.setUnitFilter(3) },
+                    label = {
+                        Text(
+                            text = "الوحدة الثالثة: الحضارية",
+                            fontWeight = if (selectedUnit == 3) FontWeight.Bold else FontWeight.Normal
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = PrimaryDarkTeal,
+                        selectedLabelColor = Color.White
+                    )
+                )
+
+                FilterChip(
+                    selected = selectedUnit == null,
+                    onClick = { viewModel.setUnitFilter(null) },
+                    label = {
+                        Text(
+                            text = "كافة الوحدات",
+                            fontWeight = if (selectedUnit == null) FontWeight.Bold else FontWeight.Normal
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = PrimaryDarkTeal,
+                        selectedLabelColor = Color.White
+                    )
                 )
             }
         }
@@ -131,8 +209,63 @@ fun HomeScreen(
             )
         }
 
+        // Unit Lessons Section Header & Content
+        val unitLessons = allLessons
+            .filter { selectedUnit == null || it.unit == selectedUnit }
+            .sortedWith(compareBy({ it.component }, { it.order }))
+
+        if (unitLessons.isNotEmpty()) {
+            item {
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = when (selectedUnit) {
+                            1 -> "دروس الوحدة الأولى (مرتبة حسب المكوّن)"
+                            3 -> "دروس الوحدة الثالثة (مرتبة حسب المكوّن)"
+                            else -> "دروس المنهج المقررة"
+                        },
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        fontSize = 17.sp
+                    )
+                    TextButton(
+                        onClick = { viewModel.selectTab(NavTab.LESSONS) }
+                    ) {
+                        Text(
+                            text = "عرض الكل",
+                            color = PrimaryDarkTeal,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            }
+
+            items(unitLessons.size) { index ->
+                val lesson = unitLessons[index]
+                val isCompleted = completedLessons.contains(lesson.id)
+                val scoreInfo = viewModel.repository.getExerciseScore(lesson.id)
+                val progress = viewModel.repository.getLessonCombinedProgress(lesson)
+
+                HomeLessonCard(
+                    lesson = lesson,
+                    isCompleted = isCompleted,
+                    scoreInfo = scoreInfo,
+                    progress = progress,
+                    showTashkeel = settings.showTashkeel,
+                    onOpenLesson = { viewModel.openLesson(lesson.id) },
+                    onOpenExercise = { viewModel.openExercise(lesson.id) }
+                )
+            }
+        }
+
         item {
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(28.dp))
         }
     }
 }
@@ -298,6 +431,176 @@ private fun ComponentProgressCard(
                         .clip(RoundedCornerShape(3.dp))
                         .background(PrimaryDarkTeal)
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeLessonCard(
+    lesson: Lesson,
+    isCompleted: Boolean,
+    scoreInfo: Pair<Int, Int>?,
+    progress: Float,
+    showTashkeel: Boolean,
+    onOpenLesson: () -> Unit,
+    onOpenExercise: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("home_lesson_card_${lesson.id}")
+            .clickable(onClick = onOpenLesson),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(GoldLight)
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = lesson.componentDisplayName,
+                                color = PrimaryDarkTeal,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Text(
+                            text = "• ${lesson.unitDisplayName} - الترتيب ${lesson.order}",
+                            color = TextMutedLight,
+                            fontSize = 11.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = TextHelper.formatArabic(lesson.title, showTashkeel),
+                        fontFamily = AmiriFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 18.sp
+                    )
+                }
+
+                if (isCompleted || progress >= 1f) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(SuccessGreen.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = "مكتمل",
+                            tint = SuccessGreen,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Progress bar
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "نسبة الإنجاز:",
+                    fontSize = 11.sp,
+                    color = TextSecondaryLight
+                )
+                Text(
+                    text = "${(progress * 100).toInt()}%",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (progress >= 1f) SuccessGreen else PrimaryDarkTeal
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(5.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(Color(0xFFE2ECE9))
+            ) {
+                if (progress > 0f) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(progress.coerceIn(0.04f, 1f))
+                            .height(5.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(if (progress >= 1f) SuccessGreen else PrimaryDarkTeal)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = onOpenLesson,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(40.dp)
+                        .testTag("home_read_btn_${lesson.id}"),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryDarkTeal)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.MenuBook,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.size(4.dp))
+                    Text("مراجعة", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                }
+
+                OutlinedButton(
+                    onClick = onOpenExercise,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(40.dp)
+                        .testTag("home_exercise_btn_${lesson.id}"),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Quiz,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = PrimaryDarkTeal
+                    )
+                    Spacer(modifier = Modifier.size(4.dp))
+                    Text("تدرّب الآن", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryDarkTeal)
+                }
             }
         }
     }

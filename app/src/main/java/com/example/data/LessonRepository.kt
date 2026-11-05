@@ -110,33 +110,40 @@ class LessonRepository(private val context: Context) {
 
     /**
      * Resume lesson logic:
-     * - Returns the previously studied lesson if unfinished.
-     * - Otherwise returns the first uncompleted lesson from the new lessons.
-     * - If all completed, returns the first lesson.
+     * - Returns the previously studied lesson if unfinished and belongs to the selected unit.
+     * - Otherwise returns the first uncompleted lesson in the selected unit.
+     * - If all completed, returns the first lesson of that unit.
      */
-    fun getResumeLesson(): Lesson? {
+    fun getResumeLesson(unit: Int? = null): Lesson? {
         val allLessons = _lessons.value
         if (allLessons.isEmpty()) return null
+
+        val lessonsInUnit = if (unit != null) {
+            allLessons.filter { it.unit == unit }
+        } else {
+            allLessons
+        }
+        if (lessonsInUnit.isEmpty()) return allLessons.firstOrNull()
 
         val completed = _completedLessons.value
         val lastId = prefs.getString("last_studied_lesson_id", null)
 
-        // 1) Previous unfinished lesson?
+        // 1) Previous unfinished lesson in this unit?
         if (!lastId.isNullOrEmpty() && lastId != "shart_lesson") {
-            val lastLesson = allLessons.firstOrNull { it.id == lastId }
+            val lastLesson = lessonsInUnit.firstOrNull { it.id == lastId }
             if (lastLesson != null && !completed.contains(lastId)) {
                 return lastLesson
             }
         }
 
-        // 2) First uncompleted lesson
-        val firstUncompleted = allLessons.firstOrNull { !completed.contains(it.id) }
+        // 2) First uncompleted lesson in this unit
+        val firstUncompleted = lessonsInUnit.firstOrNull { !completed.contains(it.id) }
         if (firstUncompleted != null) {
             return firstUncompleted
         }
 
-        // 3) Default to first lesson
-        return allLessons.firstOrNull()
+        // 3) Default to first lesson of this unit
+        return lessonsInUnit.firstOrNull()
     }
 
     fun setLastStudiedLessonId(lessonId: String) {
@@ -154,6 +161,46 @@ class LessonRepository(private val context: Context) {
         prefs.edit().putInt("lesson_step_$lessonId", stepIndex).apply()
     }
 
+    fun markCardsCompleted(lessonId: String) {
+        if (lessonId == "shart_lesson") return
+        prefs.edit().putBoolean("cards_completed_$lessonId", true).apply()
+        checkOverallCompletion(lessonId)
+    }
+
+    fun markExercisesCompleted(lessonId: String) {
+        if (lessonId == "shart_lesson") return
+        prefs.edit().putBoolean("exercises_completed_$lessonId", true).apply()
+        checkOverallCompletion(lessonId)
+    }
+
+    private fun checkOverallCompletion(lessonId: String) {
+        val cardsDone = prefs.getBoolean("cards_completed_$lessonId", false)
+        val exercisesDone = prefs.getBoolean("exercises_completed_$lessonId", false)
+        if (cardsDone && exercisesDone) {
+            markLessonCompleted(lessonId)
+        }
+    }
+
+    fun getLessonCombinedProgress(lesson: Lesson): Float {
+        if (_completedLessons.value.contains(lesson.id)) return 1.0f
+        val cardsDone = prefs.getBoolean("cards_completed_${lesson.id}", false)
+        val exercisesDone = prefs.getBoolean("exercises_completed_${lesson.id}", false)
+        if (cardsDone && exercisesDone) return 1.0f
+
+        val step = getLessonProgress(lesson.id)
+        val cardsRatio = if (lesson.cards.isNotEmpty()) {
+            if (cardsDone) 0.5f else ((step + 1).toFloat() / lesson.cards.size.toFloat()) * 0.5f
+        } else 0.5f
+
+        val exercisesRatio = if (exercisesDone) 0.5f else {
+            val scorePair = getExerciseScore(lesson.id)
+            if (scorePair != null && scorePair.second > 0) {
+                (scorePair.first.toFloat() / scorePair.second.toFloat()) * 0.5f
+            } else 0.0f
+        }
+        return (cardsRatio + exercisesRatio).coerceIn(0.0f, 1.0f)
+    }
+
     fun getExerciseScore(lessonId: String): Pair<Int, Int>? {
         if (lessonId == "shart_lesson") return null
         if (!prefs.contains("score_${lessonId}_val")) return null
@@ -168,9 +215,7 @@ class LessonRepository(private val context: Context) {
             .putInt("score_${lessonId}_val", score)
             .putInt("score_${lessonId}_total", total)
             .apply()
-        if (score >= (total / 2)) {
-            markLessonCompleted(lessonId)
-        }
+        markExercisesCompleted(lessonId)
     }
 
     fun resetProgress() {
@@ -376,9 +421,15 @@ class LessonRepository(private val context: Context) {
         return list
     }
 
-    fun getComponentInfos(): List<ComponentInfo> {
+    fun getComponentInfos(unit: Int? = null): List<ComponentInfo> {
         val allLessons = _lessons.value
         val completed = _completedLessons.value
+
+        val filteredLessons = if (unit != null) {
+            allLessons.filter { it.unit == unit }
+        } else {
+            allLessons
+        }
 
         val componentDefs = listOf(
             Triple("texts", "النصوص القرائية والشعرية", "نص + شرح + أسئلة الفهم"),
@@ -388,7 +439,7 @@ class LessonRepository(private val context: Context) {
         )
 
         return componentDefs.map { (id, title, subtitle) ->
-            val matching = allLessons.filter { it.component == id }
+            val matching = filteredLessons.filter { it.component == id }
             val total = matching.size
             val done = matching.count { completed.contains(it.id) }
             ComponentInfo(

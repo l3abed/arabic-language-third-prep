@@ -17,6 +17,14 @@ val AmiriFontFamily = FontFamily(
     Font(R.font.amiri, FontWeight.Normal)
 )
 
+val ArefRuqaaFontFamily = FontFamily(
+    Font(R.font.aref_ruqaa, FontWeight.Normal)
+)
+
+val AmiriQuranFontFamily = FontFamily(
+    Font(R.font.amiri_quran, FontWeight.Normal)
+)
+
 val Typography = Typography(
     displayLarge = TextStyle(
         fontFamily = TajawalFontFamily,

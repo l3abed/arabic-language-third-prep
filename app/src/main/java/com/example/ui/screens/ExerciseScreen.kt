@@ -451,8 +451,11 @@ fun ExerciseScreen(
                                 }
                             }
 
-                            // Source scattered words in a 2-column uniform grid (gap: 12dp, min-height: 56dp, padding: 12dp, text-align: center)
-                            val availableWords = exercise.words.filter { !orderedWords.contains(it) }
+                            // Source scattered words (shuffled on display)
+                            val shuffledWords = remember(lesson.id, questionIndex) {
+                                exercise.words.shuffled()
+                            }
+                            val availableWords = shuffledWords.filter { !orderedWords.contains(it) }
                             if (availableWords.isNotEmpty()) {
                                 Column(
                                     modifier = Modifier.fillMaxWidth(),
