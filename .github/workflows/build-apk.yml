@@ -2,7 +2,9 @@ name: Build APK
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
   workflow_dispatch:
 
 permissions:
@@ -10,37 +12,69 @@ permissions:
 
 jobs:
   build:
+    name: Build & Package APK
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
 
-      - uses: actions/setup-java@v5
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
-          cache: gradle
+          java-version: '17'
 
-      - name: Create debug keystore
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Setup Keystore
         run: |
+          if [ -f debug.keystore.base64 ]; then
+            echo "Decoding debug.keystore.base64..."
+            base64 -d debug.keystore.base64 > debug.keystore
+          else
+            echo "Generating new debug keystore..."
+            keytool -genkeypair -v \
+              -keystore debug.keystore \
+              -storepass android -keypass android \
+              -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
           mkdir -p app
-          keytool -genkeypair -v \
-            -keystore app/debug.keystore \
-            -storepass android -keypass android \
-            -alias androiddebugkey \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -dname "CN=Android Debug,O=Android,C=US"
+          cp debug.keystore app/debug.keystore 2>/dev/null || true
 
-      - name: Build APK
+      - name: Ensure gradlew is executable
         run: |
-          chmod +x gradlew
-          ./gradlew assembleDebug
+          if [ -f gradlew ]; then
+            sed -i 's/\r$//' gradlew || true
+            chmod +x gradlew
+          else
+            echo "gradlew not found, generating wrapper..."
+            gradle wrapper
+            chmod +x gradlew
+          fi
 
-      - name: Publish release
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 14
+
+      - name: Publish GitHub Release
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "build-${{ github.run_number }}" \
+          TAG_NAME="build-${{ github.run_number }}"
+          gh release create "$TAG_NAME" \
             app/build/outputs/apk/debug/*.apk \
-            --title "APK build #${{ github.run_number }}" \
+            --title "APK Build #${{ github.run_number }}" \
             --generate-notes \
-            --target "$GITHUB_SHA"
+            --target "$GITHUB_SHA" || echo "Release creation skipped or failed, APK is preserved in Artifacts"
