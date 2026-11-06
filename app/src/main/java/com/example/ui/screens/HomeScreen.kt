@@ -115,8 +115,23 @@ fun HomeScreen(
                     onClick = { viewModel.setUnitFilter(1) },
                     label = {
                         Text(
-                            text = "الوحدة الأولى: القيم الإسلامية",
+                            text = "الوحدة 1: القيم الإسلامية",
                             fontWeight = if (selectedUnit == 1) FontWeight.Bold else FontWeight.Normal
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = PrimaryDarkTeal,
+                        selectedLabelColor = Color.White
+                    )
+                )
+
+                FilterChip(
+                    selected = selectedUnit == 2,
+                    onClick = { viewModel.setUnitFilter(2) },
+                    label = {
+                        Text(
+                            text = "الوحدة 2: الوطنية والإنسانية",
+                            fontWeight = if (selectedUnit == 2) FontWeight.Bold else FontWeight.Normal
                         )
                     },
                     colors = FilterChipDefaults.filterChipColors(
@@ -130,7 +145,7 @@ fun HomeScreen(
                     onClick = { viewModel.setUnitFilter(3) },
                     label = {
                         Text(
-                            text = "الوحدة الثالثة: الحضارية",
+                            text = "الوحدة 3: المجال الحضاري",
                             fontWeight = if (selectedUnit == 3) FontWeight.Bold else FontWeight.Normal
                         )
                     },
@@ -200,11 +215,10 @@ fun HomeScreen(
                 info = info,
                 onClick = {
                     if (info.id == "exams") {
-                        viewModel.openExam()
-                    } else {
-                        viewModel.setComponentFilter(info.id)
-                        viewModel.selectTab(NavTab.LESSONS)
+                        viewModel.setUnitFilter(null)
                     }
+                    viewModel.setComponentFilter(info.id)
+                    viewModel.selectTab(NavTab.LESSONS)
                 }
             )
         }
@@ -224,8 +238,9 @@ fun HomeScreen(
                 ) {
                     Text(
                         text = when (selectedUnit) {
-                            1 -> "دروس الوحدة الأولى (مرتبة حسب المكوّن)"
-                            3 -> "دروس الوحدة الثالثة (مرتبة حسب المكوّن)"
+                            1 -> "دروس الوحدة الأولى: القيم الإسلامية"
+                            2 -> "دروس الوحدة الثانية: القيم الوطنية والإنسانية"
+                            3 -> "دروس الوحدة الثالثة: المجال الحضاري"
                             else -> "دروس المنهج المقررة"
                         },
                         style = MaterialTheme.typography.titleLarge,

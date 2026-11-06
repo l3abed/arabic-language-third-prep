@@ -1,7 +1,9 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -25,12 +28,18 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,6 +58,7 @@ import com.example.ui.theme.TextMutedLight
 import com.example.ui.theme.TextSecondaryLight
 import com.example.util.TextHelper
 import com.example.viewmodel.ArabicAppViewModel
+import com.example.viewmodel.NavTab
 
 @Composable
 fun ExercisesOverviewScreen(
@@ -57,6 +67,17 @@ fun ExercisesOverviewScreen(
 ) {
     val lessons by viewModel.lessons.collectAsState()
     val settings by viewModel.settings.collectAsState()
+    val allExams = viewModel.allExams
+
+    var selectedUnitFilter by remember { mutableStateOf<Int?>(null) }
+
+    val filteredLessons = remember(lessons, selectedUnitFilter) {
+        if (selectedUnitFilter == null) {
+            lessons
+        } else {
+            lessons.filter { it.unit == selectedUnitFilter }
+        }
+    }
 
     LazyColumn(
         modifier = modifier
@@ -67,7 +88,7 @@ fun ExercisesOverviewScreen(
         item {
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = "بنك التمارين التفاعلية",
+                text = "بنك التمارين والامتحانات",
                 style = MaterialTheme.typography.displayMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground,
@@ -75,29 +96,59 @@ fun ExercisesOverviewScreen(
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "اختبارات تفاعلية: اختيار من متعدد، صح/خطأ، ترتيب كلمات",
+                text = "فروض شاملة وامتحانات تقويمية لجميع الوحدات (1 و2 و3) وتمارين تفاعلية",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextSecondaryLight,
                 fontSize = 14.sp
             )
-            Spacer(modifier = Modifier.height(8.dp))
         }
 
-        // Homework Exam Card
+        // Section 1: All 4 Exams / Assessments
         item {
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "نماذج الامتحانات والفروض (4 نماذج)",
+                    fontFamily = AmiriFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 19.sp,
+                    color = PrimaryDarkTeal
+                )
+                TextButton(
+                    onClick = {
+                        viewModel.setUnitFilter(null)
+                        viewModel.setComponentFilter("exams")
+                        viewModel.selectTab(NavTab.LESSONS)
+                    }
+                ) {
+                    Text(
+                        text = "عرض الكل",
+                        color = GoldAccent,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                }
+            }
+        }
+
+        // Render each of the 4 exams as a distinct card
+        items(allExams) { exam ->
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag("exercise_homework_exam_card")
-                    .clickable { viewModel.openExam() },
+                    .testTag("exercise_exam_card_${exam.id}"),
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = PrimaryDarkTeal),
-                elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(18.dp),
+                        .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Row(
@@ -108,11 +159,12 @@ fun ExercisesOverviewScreen(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(GoldAccent)
-                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                                .background(GoldLight.copy(alpha = 0.35f))
+                                .border(1.dp, GoldAccent, RoundedCornerShape(8.dp))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
                         ) {
                             Text(
-                                text = "20 / 20 نقطة",
+                                text = "${exam.declaredTotal} / 20 نقطة",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp,
                                 color = PrimaryDarkTeal
@@ -120,39 +172,178 @@ fun ExercisesOverviewScreen(
                         }
 
                         Text(
-                            text = "الفرض المنزلي الأول",
-                            color = Color.White,
+                            text = exam.title,
                             fontFamily = AmiriFontFamily,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp
+                            fontSize = 18.sp,
+                            color = PrimaryDarkTeal
                         )
                     }
 
-                    Text(
-                        text = "نص الانطلاق والأسئلة الشاملة مع نموذج التصحيح وسلم التنقيط لجميع المجالات",
-                        color = Color.White.copy(alpha = 0.85f),
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp
-                    )
+                    if (exam.passage.title.isNotBlank()) {
+                        Text(
+                            text = "نص الانطلاق: «${exam.passage.title}»",
+                            fontFamily = AmiriFontFamily,
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
 
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = when (exam.unit) {
+                                1 -> "الوحدة الأولى: القيم الإسلامية"
+                                2 -> "الوحدة الثانية: القيم الوطنية والإنسانية"
+                                3 -> "الوحدة الثالثة: المجال الحضاري"
+                                else -> "الأسدس الأول: تقويم إجمالي شامل"
+                            },
+                            fontSize = 12.sp,
+                            color = TextSecondaryLight
+                        )
+                        Text(text = "•", fontSize = 12.sp, color = TextMutedLight)
+                        Text(
+                            text = "المدة: ${exam.duration}",
+                            fontSize = 12.sp,
+                            color = TextSecondaryLight
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(2.dp))
 
                     Button(
-                        onClick = { viewModel.openExam() },
-                        modifier = Modifier.fillMaxWidth().height(42.dp),
+                        onClick = { viewModel.openExam(exam.id) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .testTag("start_exam_btn_${exam.id}"),
                         shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = GoldAccent,
-                            contentColor = PrimaryDarkTeal
+                            containerColor = PrimaryDarkTeal,
+                            contentColor = Color.White
                         )
                     ) {
-                        Text("بدء الفرض المنزلي ونموذج الإجابة", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Icon(
+                            imageVector = Icons.Filled.PlayArrow,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "بدء الفرض ونموذج التصحيح",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
                     }
                 }
             }
         }
 
-        items(lessons) { lesson ->
+        // Section 2: Interactive Lesson Quizzes
+        item {
+            Spacer(modifier = Modifier.height(10.dp))
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "تمارين الدروس التفاعلية (21 درساً)",
+                    fontFamily = AmiriFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 19.sp,
+                    color = PrimaryDarkTeal
+                )
+
+                // Unit Filter Chips for lesson exercises
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = selectedUnitFilter == null,
+                        onClick = { selectedUnitFilter = null },
+                        label = {
+                            Text(
+                                text = "كافة الوحدات (21)",
+                                fontSize = 13.sp,
+                                fontWeight = if (selectedUnitFilter == null) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = PrimaryDarkTeal,
+                            selectedLabelColor = Color.White,
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            labelColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        shape = RoundedCornerShape(20.dp)
+                    )
+
+                    FilterChip(
+                        selected = selectedUnitFilter == 1,
+                        onClick = { selectedUnitFilter = 1 },
+                        label = {
+                            Text(
+                                text = "الوحدة 1: القيم الإسلامية (7)",
+                                fontSize = 13.sp,
+                                fontWeight = if (selectedUnitFilter == 1) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = PrimaryDarkTeal,
+                            selectedLabelColor = Color.White,
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            labelColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        shape = RoundedCornerShape(20.dp)
+                    )
+
+                    FilterChip(
+                        selected = selectedUnitFilter == 2,
+                        onClick = { selectedUnitFilter = 2 },
+                        label = {
+                            Text(
+                                text = "الوحدة 2: الوطنية والإنسانية (7)",
+                                fontSize = 13.sp,
+                                fontWeight = if (selectedUnitFilter == 2) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = PrimaryDarkTeal,
+                            selectedLabelColor = Color.White,
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            labelColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        shape = RoundedCornerShape(20.dp)
+                    )
+
+                    FilterChip(
+                        selected = selectedUnitFilter == 3,
+                        onClick = { selectedUnitFilter = 3 },
+                        label = {
+                            Text(
+                                text = "الوحدة 3: المجال الحضاري (7)",
+                                fontSize = 13.sp,
+                                fontWeight = if (selectedUnitFilter == 3) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = PrimaryDarkTeal,
+                            selectedLabelColor = Color.White,
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            labelColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        shape = RoundedCornerShape(20.dp)
+                    )
+                }
+            }
+        }
+
+        items(filteredLessons) { lesson ->
             val scoreInfo = viewModel.repository.getExerciseScore(lesson.id)
             ExerciseLessonCard(
                 lesson = lesson,
@@ -196,18 +387,29 @@ private fun ExerciseLessonCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                // Component tag
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(GoldLight)
-                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                // Component tag & Unit tag
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(GoldLight)
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = lesson.componentDisplayName,
+                            color = PrimaryDarkTeal,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
                     Text(
-                        text = lesson.componentDisplayName,
-                        color = PrimaryDarkTeal,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
+                        text = "• ${lesson.unitDisplayName}",
+                        color = TextMutedLight,
+                        fontSize = 11.sp
                     )
                 }
 

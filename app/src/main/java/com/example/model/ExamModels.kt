@@ -2,21 +2,24 @@ package com.example.model
 
 data class ExamData(
     val id: String,
-    val component: String,
-    val semester: Int,
-    val unit: Int,
-    val type: String,
-    val order: Int,
+    val component: String = "exams",
+    val semester: Int = 1,
+    val unit: Int? = null,
+    val type: String = "exam",
+    val order: Int = 1,
     val title: String,
-    val subject: String,
-    val duration: String,
-    val declaredTotal: Int,
-    val noteForTeacher: String,
+    val subject: String = "",
+    val duration: String = "",
+    val declaredTotal: Int = 20,
+    val noteForTeacher: String = "",
     val passage: ExamPassage,
-    val sections: List<ExamSection>
+    val sections: List<ExamSection> = emptyList()
 ) {
     val totalPoints: Double
         get() = sections.sumOf { it.points }
+
+    val isTotalValid: Boolean
+        get() = Math.abs(totalPoints - declaredTotal.toDouble()) < 0.01
 }
 
 data class ExamPassage(
@@ -29,17 +32,28 @@ data class ExamSection(
     val title: String,
     val points: Double,
     val questions: List<ExamQuestion> = emptyList(),
+    val chooseOne: Boolean = false,
+    val topics: List<ExamTopic> = emptyList(),
     val topic: String? = null,
     val rubric: List<RubricItem> = emptyList(),
     val modelText: String? = null,
+    val modelPoints: List<String> = emptyList(),
     val gradingNote: String? = null
+)
+
+data class ExamTopic(
+    val id: String = "",
+    val title: String = "",
+    val prompt: String = "",
+    val modelPoints: List<String> = emptyList(),
+    val modelText: String? = null
 )
 
 data class ExamQuestion(
     val no: String,
     val points: Double,
     val prompt: String,
-    val grading: String,
+    val grading: String = "",
     val answerGroups: List<List<AnswerItem>> = emptyList()
 )
 

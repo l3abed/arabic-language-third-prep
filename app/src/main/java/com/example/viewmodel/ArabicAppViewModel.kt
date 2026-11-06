@@ -37,11 +37,30 @@ class ArabicAppViewModel(application: Application) : AndroidViewModel(applicatio
     val audioPlayer = ArabicAudioPlayer(application)
 
     // Exam data & in-memory answers (strictly not saved in localStorage / SharedPreferences)
-    val homeworkExam = repository.getHomeworkExam()
+    val allExams: List<com.example.model.ExamData> get() = repository.getAllExams()
+    val homeworkExam: com.example.model.ExamData? get() = repository.getExamById(_selectedExamId.value) ?: repository.getHomeworkExam()
+
+    private val _selectedExamId = MutableStateFlow("exam-s1-homework-1")
+    val selectedExamId: StateFlow<String> = _selectedExamId.asStateFlow()
+
+    val currentExam: StateFlow<com.example.model.ExamData?> = combine(
+        _selectedExamId,
+        repository.lessons
+    ) { examId, _ ->
+        repository.getExamById(examId)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), repository.getHomeworkExam())
+
     val examAnswers = androidx.compose.runtime.mutableStateMapOf<String, String>()
-    var isExamSubmitted by androidx.compose.runtime.mutableStateOf(false)
-    var showCorrectionModel by androidx.compose.runtime.mutableStateOf(false)
+    val selectedExamTopics = androidx.compose.runtime.mutableStateMapOf<String, String>()
+    val submittedExams = androidx.compose.runtime.mutableStateMapOf<String, Boolean>()
+    val showCorrectionExams = androidx.compose.runtime.mutableStateMapOf<String, Boolean>()
     var examValidationError by androidx.compose.runtime.mutableStateOf<String?>(null)
+
+    val isExamSubmitted: Boolean
+        get() = submittedExams[_selectedExamId.value] == true
+
+    val showCorrectionModel: Boolean
+        get() = showCorrectionExams[_selectedExamId.value] == true
 
     private val _currentTab = MutableStateFlow(NavTab.HOME)
     val currentTab: StateFlow<NavTab> = _currentTab.asStateFlow()
@@ -187,12 +206,21 @@ class ArabicAppViewModel(application: Application) : AndroidViewModel(applicatio
         audioPlayer.speak(text, settings.value.speechRate)
     }
 
-    fun openExam() {
-        if (!isExamSubmitted) {
-            showCorrectionModel = false
-        }
+    fun openExam(examId: String = "exam-s1-homework-1") {
+        _selectedExamId.value = examId
         examValidationError = null
         _activeScreen.value = ActiveScreen.EXAM_VIEW
+    }
+
+    fun selectExamTopic(examId: String, sectionId: String, topicId: String) {
+        selectedExamTopics["${examId}_${sectionId}"] = topicId
+        if (examValidationError != null) {
+            examValidationError = null
+        }
+    }
+
+    fun getSelectedExamTopic(examId: String, sectionId: String): String? {
+        return selectedExamTopics["${examId}_${sectionId}"]
     }
 
     fun updateExamAnswer(key: String, text: String) {
@@ -203,20 +231,26 @@ class ArabicAppViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun validateExamSubmission(): String? {
-        val exam = homeworkExam ?: return null
+        val exam = repository.getExamById(_selectedExamId.value) ?: return null
         for (section in exam.sections) {
             for (q in section.questions) {
-                val key = "${section.id}_q${q.no}"
+                val key = "${exam.id}_${section.id}_q${q.no}"
                 val ans = examAnswers[key]
                 if (ans.isNullOrBlank()) {
-                    return "يرجى الإجابة عن السؤال ${q.no} في «${section.title}» قبل تسليم الفرض."
+                    return "يرجى الإجابة عن السؤال ${q.no} في «${section.title}» قبل تسليم الامتحان."
                 }
             }
-            if (section.id == "C" || section.topic != null) {
-                val key = "${section.id}_writing"
-                val ans = examAnswers[key]
+            if (section.id == "C" || section.topic != null || section.topics.isNotEmpty()) {
+                if (section.chooseOne) {
+                    val chosen = getSelectedExamTopic(exam.id, section.id)
+                    if (chosen.isNullOrBlank()) {
+                        return "يرجى اختيار أحد الموضوعين في «${section.title}» قبل تسليم الامتحان."
+                    }
+                }
+                val writingKey = "${exam.id}_${section.id}_writing"
+                val ans = examAnswers[writingKey]
                 if (ans.isNullOrBlank()) {
-                    return "يرجى كتابة موضوع الإنشاء في «${section.title}» قبل تسليم الفرض."
+                    return "يرجى كتابة موضوع الإنشاء في «${section.title}» قبل تسليم الامتحان."
                 }
             }
         }
@@ -225,28 +259,36 @@ class ArabicAppViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun submitExam(): Boolean {
         val error = validateExamSubmission()
+        val examId = _selectedExamId.value
         if (error != null) {
             examValidationError = error
-            isExamSubmitted = false
-            showCorrectionModel = false
+            submittedExams[examId] = false
+            showCorrectionExams[examId] = false
             return false
         }
         examValidationError = null
-        isExamSubmitted = true
-        showCorrectionModel = true
+        submittedExams[examId] = true
+        showCorrectionExams[examId] = true
         return true
     }
 
     fun toggleCorrectionModel() {
-        if (isExamSubmitted) {
-            showCorrectionModel = !showCorrectionModel
+        val examId = _selectedExamId.value
+        if (submittedExams[examId] == true) {
+            val current = showCorrectionExams[examId] ?: false
+            showCorrectionExams[examId] = !current
         }
     }
 
     fun resetExam() {
-        examAnswers.clear()
-        isExamSubmitted = false
-        showCorrectionModel = false
+        val examId = _selectedExamId.value
+        val prefix = "${examId}_"
+        val keysToRemove = examAnswers.keys.filter { it.startsWith(prefix) }
+        keysToRemove.forEach { examAnswers.remove(it) }
+        val topicKeysToRemove = selectedExamTopics.keys.filter { it.startsWith(prefix) }
+        topicKeysToRemove.forEach { selectedExamTopics.remove(it) }
+        submittedExams[examId] = false
+        showCorrectionExams[examId] = false
         examValidationError = null
     }
 

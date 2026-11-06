@@ -34,6 +34,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -104,12 +105,17 @@ fun LessonsListScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             FilterChipItem(
-                label = "الوحدة الأولى: القيم الإسلامية",
+                label = "الوحدة 1: القيم الإسلامية",
                 isSelected = selectedUnit == 1,
                 onClick = { viewModel.setUnitFilter(1) }
             )
             FilterChipItem(
-                label = "الوحدة الثالثة: الحضارية",
+                label = "الوحدة 2: الوطنية والإنسانية",
+                isSelected = selectedUnit == 2,
+                onClick = { viewModel.setUnitFilter(2) }
+            )
+            FilterChipItem(
+                label = "الوحدة 3: المجال الحضاري",
                 isSelected = selectedUnit == 3,
                 onClick = { viewModel.setUnitFilter(3) }
             )
@@ -208,80 +214,186 @@ fun LessonsListScreen(
 
         // Lessons List or Exam Section
         if (selectedComponentId == "exams") {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("homework_exam_card"),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            val examsToShow = if (selectedUnit == null) {
+                viewModel.allExams
+            } else {
+                viewModel.allExams.filter { it.unit == selectedUnit || it.unit == null }
+            }
+
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Row(
+                item {
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(GoldLight.copy(alpha = 0.3f))
-                                .border(1.dp, GoldAccent, RoundedCornerShape(8.dp))
-                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "20 / 20 نقطة",
+                                text = "نماذج الامتحانات والفروض (${examsToShow.size} من 4)",
+                                fontFamily = AmiriFontFamily,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp,
+                                fontSize = 18.sp,
                                 color = PrimaryDarkTeal
                             )
+
+                            if (selectedUnit != null) {
+                                TextButton(
+                                    onClick = { viewModel.setUnitFilter(null) }
+                                ) {
+                                    Text(
+                                        text = "عرض كافة الامتحانات (4)",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = GoldAccent
+                                    )
+                                }
+                            }
                         }
 
-                        Text(
-                            text = "الفرض المحروس الأول",
-                            fontFamily = AmiriFontFamily,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp,
-                            color = PrimaryDarkTeal
-                        )
+                        // Exam Quick Filter Chips (All, Unit 1, Unit 2, Unit 3, General)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            FilterChipItem(
+                                label = "الكل (4 امتحانات)",
+                                isSelected = selectedUnit == null,
+                                onClick = { viewModel.setUnitFilter(null) }
+                            )
+                            FilterChipItem(
+                                label = "فرض الوحدة 1",
+                                isSelected = selectedUnit == 1,
+                                onClick = { viewModel.setUnitFilter(1) }
+                            )
+                            FilterChipItem(
+                                label = "تقويم الوحدة 2",
+                                isSelected = selectedUnit == 2,
+                                onClick = { viewModel.setUnitFilter(2) }
+                            )
+                            FilterChipItem(
+                                label = "تقويم الوحدة 3",
+                                isSelected = selectedUnit == 3,
+                                onClick = { viewModel.setUnitFilter(3) }
+                            )
+                        }
                     }
+                }
 
-                    Text(
-                        text = "نص الانطلاق: «التسامح والتضامن أساس التعايش الإنساني»",
-                        fontFamily = AmiriFontFamily,
-                        fontSize = 16.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-
-                    Text(
-                        text = "يشمل: القراءة والفهم (8 ن)، الدرس اللغوي (6 ن)، التعبير والإنشاء (6 ن) مع نموذج التصحيح وسلم التنقيط.",
-                        fontSize = 13.sp,
-                        color = TextSecondaryLight,
-                        lineHeight = 18.sp
-                    )
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    Button(
-                        onClick = { viewModel.openExam() },
+                items(examsToShow) { exam ->
+                    Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp)
-                            .testTag("start_homework_exam_button"),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryDarkTeal)
+                            .testTag("exam_card_${exam.id}"),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                     ) {
-                        Text(
-                            text = "فتح الفرض المنزلي ونموذج التصحيح",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp
-                        )
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(18.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(GoldLight.copy(alpha = 0.35f))
+                                        .border(1.dp, GoldAccent, RoundedCornerShape(8.dp))
+                                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = "${exam.declaredTotal} / 20 نقطة",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = PrimaryDarkTeal
+                                    )
+                                }
+
+                                Text(
+                                    text = exam.title,
+                                    fontFamily = AmiriFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 19.sp,
+                                    color = PrimaryDarkTeal
+                                )
+                            }
+
+                            if (exam.passage.title.isNotBlank()) {
+                                Text(
+                                    text = "نص الانطلاق: «${exam.passage.title}»",
+                                    fontFamily = AmiriFontFamily,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 15.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = when (exam.unit) {
+                                        1 -> "الوحدة 1 (القيم الإسلامية)"
+                                        2 -> "الوحدة 2 (الوطنية والإنسانية)"
+                                        3 -> "الوحدة 3 (المجال الحضاري)"
+                                        else -> "الأسدس الأول (شامل)"
+                                    },
+                                    fontSize = 12.sp,
+                                    color = TextSecondaryLight
+                                )
+                                Text(text = "•", fontSize = 12.sp, color = TextMutedLight)
+                                Text(
+                                    text = "المدة: ${exam.duration}",
+                                    fontSize = 12.sp,
+                                    color = TextSecondaryLight
+                                )
+                            }
+
+                            Text(
+                                text = "يشمل المجالات الثلاثة: القراءة والفهم (8 ن)، الدرس اللغوي (6 ن)، التعبير والإنشاء (6 ن) مع نموذج التصحيح وسلم التنقيط.",
+                                fontSize = 13.sp,
+                                color = TextSecondaryLight,
+                                lineHeight = 18.sp
+                            )
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            Button(
+                                onClick = { viewModel.openExam(exam.id) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                                    .testTag("start_exam_btn_${exam.id}"),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryDarkTeal)
+                            ) {
+                                Text(
+                                    text = "بدء الامتحان ونموذج التصحيح",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp
+                                )
+                            }
+                        }
                     }
+                }
+
+                item {
+                    Spacer(modifier = Modifier.height(24.dp))
                 }
             }
         } else if (filteredLessons.isEmpty()) {

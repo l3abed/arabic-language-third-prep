@@ -435,21 +435,55 @@ class LessonRepository(private val context: Context) {
             Triple("texts", "النصوص القرائية والشعرية", "نص + شرح + أسئلة الفهم"),
             Triple("language", "الدرس اللغوي", "قاعدة + أمثلة + إعراب وتطبيق"),
             Triple("writing", "التعبير والإنشاء", "خطوات الكتابة + نماذج مُنجزة"),
-            Triple("exams", "نماذج الامتحانات", "فروض موحدة + تصحيح مفصّل")
+            Triple("exams", "نماذج الامتحانات", "4 امتحانات شاملة مع سلم التنقيط")
         )
 
         return componentDefs.map { (id, title, subtitle) ->
-            val matching = filteredLessons.filter { it.component == id }
-            val total = matching.size
-            val done = matching.count { completed.contains(it.id) }
-            ComponentInfo(
-                id = id,
-                title = title,
-                subtitle = subtitle,
-                totalLessons = total,
-                completedLessons = done
-            )
+            if (id == "exams") {
+                ComponentInfo(
+                    id = id,
+                    title = title,
+                    subtitle = subtitle,
+                    totalLessons = 4,
+                    completedLessons = 0
+                )
+            } else {
+                val matching = filteredLessons.filter { it.component == id }
+                val total = matching.size
+                val done = matching.count { completed.contains(it.id) }
+                ComponentInfo(
+                    id = id,
+                    title = title,
+                    subtitle = subtitle,
+                    totalLessons = total,
+                    completedLessons = done
+                )
+            }
         }
+    }
+
+    private val examAssetFiles = listOf(
+        "exam-s1-homework-1.json",
+        "exam-s1-general-assessment.json",
+        "exam-s1-unit2-assessment.json",
+        "exam-s1-unit3-assessment.json"
+    )
+
+    fun getAllExams(): List<ExamData> {
+        return examAssetFiles.mapNotNull { filename ->
+            try {
+                val jsonString = context.assets.open(filename).bufferedReader().use { it.readText() }
+                parseExamJson(jsonString)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                null
+            }
+        }
+    }
+
+    fun getExamById(examId: String): ExamData? {
+        return getAllExams().firstOrNull { it.id == examId }
+            ?: getHomeworkExam()
     }
 
     fun getHomeworkExam(): ExamData? {
@@ -467,23 +501,23 @@ class LessonRepository(private val context: Context) {
         val id = root.optString("id", "exam-s1-homework-1")
         val component = root.optString("component", "exams")
         val semester = root.optInt("semester", 1)
-        val unit = root.optInt("unit", 1)
-        val type = root.optString("type", "homework")
+        val unit = if (root.has("unit") && !root.isNull("unit")) root.getInt("unit") else null
+        val type = root.optString("type", "exam")
         val order = root.optInt("order", 1)
-        val title = root.optString("title", "الفرض المنزلي الأول")
+        val title = root.optString("title", "الفرض المحروس")
         val subject = root.optString("subject", "")
         val duration = root.optString("duration", "مرنة")
         val declaredTotal = root.optInt("declared_total", 20)
         val noteForTeacher = root.optString("note_for_teacher", "")
 
-        val passageObj = root.getJSONObject("passage")
+        val passageObj = root.optJSONObject("passage") ?: JSONObject()
         val passage = ExamPassage(
             title = passageObj.optString("title", ""),
             text = passageObj.optString("text", "")
         )
 
         val sectionsList = mutableListOf<ExamSection>()
-        val sectionsArray = root.getJSONArray("sections")
+        val sectionsArray = root.optJSONArray("sections") ?: JSONArray()
         for (s in 0 until sectionsArray.length()) {
             val sObj = sectionsArray.getJSONObject(s)
             val sId = sObj.optString("id", "")
@@ -492,6 +526,25 @@ class LessonRepository(private val context: Context) {
             val sTopic = if (sObj.has("topic") && !sObj.isNull("topic")) sObj.getString("topic") else null
             val sModelText = if (sObj.has("model_text") && !sObj.isNull("model_text")) sObj.getString("model_text") else null
             val sGradingNote = if (sObj.has("grading_note") && !sObj.isNull("grading_note")) sObj.getString("grading_note") else null
+            val sChooseOne = sObj.optBoolean("choose_one", false)
+            val sModelPoints = jsonArrayToStringList(sObj.optJSONArray("model_points"))
+
+            val topicsList = mutableListOf<com.example.model.ExamTopic>()
+            val topicsArray = sObj.optJSONArray("topics")
+            if (topicsArray != null) {
+                for (tIdx in 0 until topicsArray.length()) {
+                    val tObj = topicsArray.getJSONObject(tIdx)
+                    topicsList.add(
+                        com.example.model.ExamTopic(
+                            id = tObj.optString("id", "C${tIdx + 1}"),
+                            title = tObj.optString("title", ""),
+                            prompt = tObj.optString("prompt", ""),
+                            modelPoints = jsonArrayToStringList(tObj.optJSONArray("model_points")),
+                            modelText = if (tObj.has("model_text") && !tObj.isNull("model_text")) tObj.getString("model_text") else null
+                        )
+                    )
+                }
+            }
 
             val questionsList = mutableListOf<ExamQuestion>()
             val questionsArray = sObj.optJSONArray("questions")
@@ -504,21 +557,48 @@ class LessonRepository(private val context: Context) {
                     val grading = qObj.optString("grading", "")
                     val answerGroupsList = mutableListOf<List<com.example.model.AnswerItem>>()
                     val agArray = qObj.optJSONArray("answer_groups")
-                    if (agArray != null) {
-                        for (g in 0 until agArray.length()) {
-                            val groupArray = agArray.optJSONArray(g)
-                            if (groupArray != null) {
-                                val groupItems = mutableListOf<com.example.model.AnswerItem>()
-                                for (idx in 0 until groupArray.length()) {
-                                    val itemObj = groupArray.getJSONObject(idx)
-                                    groupItems.add(
-                                        com.example.model.AnswerItem(
-                                            label = itemObj.optString("label", ""),
-                                            value = itemObj.optString("value", "")
+                    if (agArray != null && agArray.length() > 0) {
+                        val firstItem = agArray.get(0)
+                        if (firstItem is JSONArray) {
+                            for (g in 0 until agArray.length()) {
+                                val groupArray = agArray.optJSONArray(g)
+                                if (groupArray != null) {
+                                    val groupItems = mutableListOf<com.example.model.AnswerItem>()
+                                    for (idx in 0 until groupArray.length()) {
+                                        val itemObj = groupArray.getJSONObject(idx)
+                                        groupItems.add(
+                                            com.example.model.AnswerItem(
+                                                label = itemObj.optString("label", ""),
+                                                value = itemObj.optString("value", "")
+                                            )
                                         )
-                                    )
+                                    }
+                                    if (groupItems.isNotEmpty()) {
+                                        answerGroupsList.add(groupItems)
+                                    }
                                 }
-                                answerGroupsList.add(groupItems)
+                            }
+                        } else if (firstItem is JSONObject) {
+                            var currentGroup = mutableListOf<com.example.model.AnswerItem>()
+                            val seenLabels = mutableSetOf<String>()
+                            for (idx in 0 until agArray.length()) {
+                                val itemObj = agArray.getJSONObject(idx)
+                                val lbl = itemObj.optString("label", "")
+                                val valStr = itemObj.optString("value", "")
+                                if (lbl.isNotEmpty() && seenLabels.contains(lbl)) {
+                                    if (currentGroup.isNotEmpty()) {
+                                        answerGroupsList.add(currentGroup)
+                                    }
+                                    currentGroup = mutableListOf()
+                                    seenLabels.clear()
+                                }
+                                currentGroup.add(com.example.model.AnswerItem(label = lbl, value = valStr))
+                                if (lbl.isNotEmpty()) {
+                                    seenLabels.add(lbl)
+                                }
+                            }
+                            if (currentGroup.isNotEmpty()) {
+                                answerGroupsList.add(currentGroup)
                             }
                         }
                     }
@@ -531,23 +611,30 @@ class LessonRepository(private val context: Context) {
             if (rubricArray != null) {
                 for (r in 0 until rubricArray.length()) {
                     val rObj = rubricArray.getJSONObject(r)
-                    rubricList.add(RubricItem(
-                        criterion = rObj.optString("criterion", ""),
-                        points = rObj.optDouble("points", 0.0)
-                    ))
+                    rubricList.add(
+                        RubricItem(
+                            criterion = rObj.optString("criterion", ""),
+                            points = rObj.optDouble("points", 0.0)
+                        )
+                    )
                 }
             }
 
-            sectionsList.add(ExamSection(
-                id = sId,
-                title = sTitle,
-                points = sPoints,
-                questions = questionsList,
-                topic = sTopic,
-                rubric = rubricList,
-                modelText = sModelText,
-                gradingNote = sGradingNote
-            ))
+            sectionsList.add(
+                ExamSection(
+                    id = sId,
+                    title = sTitle,
+                    points = sPoints,
+                    questions = questionsList,
+                    chooseOne = sChooseOne,
+                    topics = topicsList,
+                    topic = sTopic,
+                    rubric = rubricList,
+                    modelText = sModelText,
+                    modelPoints = sModelPoints,
+                    gradingNote = sGradingNote
+                )
+            )
         }
 
         return ExamData(
