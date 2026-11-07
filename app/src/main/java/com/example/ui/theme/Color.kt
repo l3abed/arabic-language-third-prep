@@ -24,17 +24,22 @@ val TextSecondaryLight = Color(0xFF5A7272)
 val TextMutedLight = Color(0xFF8B9E9E)
 val BorderLight = Color(0xFFE0E7E5)
 
-// Dark Mode Palette
-val AppBackgroundDark = Color(0xFF0E1A1B)
-val AppSurfaceDark = Color(0xFF142628)
-val AppSurfaceVariantDark = Color(0xFF1B3234)
-val ExampleCardBgDark = Color(0xFF162D2E)
-val NoteCardBgDark = Color(0xFF262518)
-val NoteCardBorderDark = Color(0xFF4A3F1F)
-val TextPrimaryDark = Color(0xFFEFF5F4)
-val TextSecondaryDark = Color(0xFFA6BCBC)
-val TextMutedDark = Color(0xFF6F8585)
-val BorderDark = Color(0xFF223C3E)
+// Dark Mode Palette - Blue Aesthetic (الأزرق وما يتناسب معه)
+val NightBlueBackground = Color(0xFF0D1B2A)     // Deep rich midnight navy blue
+val NightBlueSurface = Color(0xFF1B263B)        // Medium navy surface for cards
+val NightBlueSurfaceVariant = Color(0xFF24344D) // Lighter navy for elevated elements/chips
+val NightBlueCard = Color(0xFF1E2E44)           // Specific container for cards in night mode
+val NightBlueBorder = Color(0xFF2E4461)         // Subtle slate blue border
+
+val NightBluePrimary = Color(0xFF4A90E2)        // Vibrant soft ocean blue
+val NightBluePrimaryLight = Color(0xFF6BA4E8)
+val NightBlueAccent = Color(0xFF5CC8FF)         // Bright cyan/sky blue accent
+val NightGoldAccent = Color(0xFFF6C358)         // Warm gold accent complement
+
+val TextPrimaryDark = Color(0xFFF0F4F8)         // Clear high-contrast ice white
+val TextSecondaryDark = Color(0xFFB0C4DE)       // Light steel blue
+val TextMutedDark = Color(0xFF7A92A8)           // Muted slate blue
+val BorderDark = Color(0xFF2A3F5A)
 
 val SuccessGreen = Color(0xFF2E7D32)
 val ErrorRed = Color(0xFFC62828)

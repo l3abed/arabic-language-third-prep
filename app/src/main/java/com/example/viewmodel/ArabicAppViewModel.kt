@@ -38,7 +38,31 @@ class ArabicAppViewModel(application: Application) : AndroidViewModel(applicatio
 
     // Exam data & in-memory answers (strictly not saved in localStorage / SharedPreferences)
     val allExams: List<com.example.model.ExamData> get() = repository.getAllExams()
+    val localExams: List<com.example.model.ExamData> get() = repository.getLocalExams()
+    val standardExams: List<com.example.model.ExamData> get() = repository.getStandardExams()
+    val unitAssessments: List<com.example.model.ExamData>
+        get() {
+            val list = standardExams.filter { it.id.contains("assessment") || it.title.contains("تقويم") }
+            val assessmentOrder = listOf(
+                "exam-s1-unit1-assessment",
+                "exam-s1-unit2-assessment",
+                "exam-s1-unit3-assessment",
+                "exam-s1-general-assessment"
+            )
+            return list.sortedBy { exam ->
+                val idx = assessmentOrder.indexOf(exam.id)
+                if (idx >= 0) idx else 99
+            }
+        }
+    val homeworkExams: List<com.example.model.ExamData>
+        get() = standardExams.filter { it.id.contains("homework") || it.title.contains("الفرض") }
     val homeworkExam: com.example.model.ExamData? get() = repository.getExamById(_selectedExamId.value) ?: repository.getHomeworkExam()
+
+    var isTeacherMode by androidx.compose.runtime.mutableStateOf(false)
+
+    fun toggleTeacherMode() {
+        isTeacherMode = !isTeacherMode
+    }
 
     private val _selectedExamId = MutableStateFlow("exam-s1-homework-1")
     val selectedExamId: StateFlow<String> = _selectedExamId.asStateFlow()

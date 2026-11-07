@@ -22,6 +22,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.FitnessCenter
 import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material3.Button
@@ -38,17 +40,21 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.Lesson
 import com.example.ui.theme.AmiriFontFamily
+import com.example.ui.theme.BorderLight
 import com.example.ui.theme.GoldAccent
 import com.example.ui.theme.GoldLight
 import com.example.ui.theme.PrimaryDarkTeal
@@ -214,11 +220,13 @@ fun LessonsListScreen(
 
         // Lessons List or Exam Section
         if (selectedComponentId == "exams") {
-            val examsToShow = if (selectedUnit == null) {
-                viewModel.allExams
-            } else {
-                viewModel.allExams.filter { it.unit == selectedUnit || it.unit == null }
-            }
+            var isLocalExpanded by remember { mutableStateOf(false) }
+            var isAssessmentsExpanded by remember { mutableStateOf(false) }
+            var isHomeworkExpanded by remember { mutableStateOf(false) }
+
+            val localExams = viewModel.localExams
+            val unitAssessments = viewModel.unitAssessments
+            val homeworkExams = viewModel.homeworkExams
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -227,168 +235,123 @@ fun LessonsListScreen(
                 item {
                     Column(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "نماذج الامتحانات والفروض (${examsToShow.size} من 4)",
-                                fontFamily = AmiriFontFamily,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 18.sp,
-                                color = PrimaryDarkTeal
-                            )
+                        Text(
+                            text = "نماذج الامتحانات والفروض",
+                            fontFamily = AmiriFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 20.sp,
+                            color = PrimaryDarkTeal
+                        )
 
-                            if (selectedUnit != null) {
-                                TextButton(
-                                    onClick = { viewModel.setUnitFilter(null) }
-                                ) {
-                                    Text(
-                                        text = "عرض كافة الامتحانات (4)",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 12.sp,
-                                        color = GoldAccent
-                                    )
-                                }
-                            }
-                        }
-
-                        // Exam Quick Filter Chips (All, Unit 1, Unit 2, Unit 3, General)
+                        // 3 Quick Action Category Filter Chips
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             FilterChipItem(
-                                label = "الكل (4 امتحانات)",
-                                isSelected = selectedUnit == null,
-                                onClick = { viewModel.setUnitFilter(null) }
+                                label = "امتحانات محلية (${localExams.size})",
+                                isSelected = isLocalExpanded,
+                                onClick = { isLocalExpanded = !isLocalExpanded }
                             )
                             FilterChipItem(
-                                label = "فرض الوحدة 1",
-                                isSelected = selectedUnit == 1,
-                                onClick = { viewModel.setUnitFilter(1) }
+                                label = "تقويمات الوحدات الدراسية (${unitAssessments.size})",
+                                isSelected = isAssessmentsExpanded,
+                                onClick = { isAssessmentsExpanded = !isAssessmentsExpanded }
                             )
                             FilterChipItem(
-                                label = "تقويم الوحدة 2",
-                                isSelected = selectedUnit == 2,
-                                onClick = { viewModel.setUnitFilter(2) }
-                            )
-                            FilterChipItem(
-                                label = "تقويم الوحدة 3",
-                                isSelected = selectedUnit == 3,
-                                onClick = { viewModel.setUnitFilter(3) }
+                                label = "الفروض المنزلية (${homeworkExams.size})",
+                                isSelected = isHomeworkExpanded,
+                                onClick = { isHomeworkExpanded = !isHomeworkExpanded }
                             )
                         }
                     }
                 }
 
-                items(examsToShow) { exam ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("exam_card_${exam.id}"),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(18.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                // Initial instruction card when all are collapsed
+                if (!isLocalExpanded && !isAssessmentsExpanded && !isHomeworkExpanded) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = GoldLight.copy(alpha = 0.3f)),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, GoldAccent.copy(alpha = 0.5f))
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(GoldLight.copy(alpha = 0.35f))
-                                        .border(1.dp, GoldAccent, RoundedCornerShape(8.dp))
-                                        .padding(horizontal = 10.dp, vertical = 4.dp)
-                                ) {
-                                    Text(
-                                        text = "${exam.declaredTotal} / 20 نقطة",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        color = PrimaryDarkTeal
-                                    )
-                                }
-
-                                Text(
-                                    text = exam.title,
-                                    fontFamily = AmiriFontFamily,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 19.sp,
-                                    color = PrimaryDarkTeal
-                                )
-                            }
-
-                            if (exam.passage.title.isNotBlank()) {
-                                Text(
-                                    text = "نص الانطلاق: «${exam.passage.title}»",
-                                    fontFamily = AmiriFontFamily,
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 15.sp,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = when (exam.unit) {
-                                        1 -> "الوحدة 1 (القيم الإسلامية)"
-                                        2 -> "الوحدة 2 (الوطنية والإنسانية)"
-                                        3 -> "الوحدة 3 (المجال الحضاري)"
-                                        else -> "الأسدس الأول (شامل)"
-                                    },
-                                    fontSize = 12.sp,
-                                    color = TextSecondaryLight
-                                )
-                                Text(text = "•", fontSize = 12.sp, color = TextMutedLight)
-                                Text(
-                                    text = "المدة: ${exam.duration}",
-                                    fontSize = 12.sp,
-                                    color = TextSecondaryLight
-                                )
-                            }
-
                             Text(
-                                text = "يشمل المجالات الثلاثة: القراءة والفهم (8 ن)، الدرس اللغوي (6 ن)، التعبير والإنشاء (6 ن) مع نموذج التصحيح وسلم التنقيط.",
+                                text = "اضغط على زر الفئة المطلوبة أدناه (امتحانات محلية، أو تقويمات الوحدات الدراسية، أو الفروض المنزلية) لعرض نماذجها مع التصحيح الكامل.",
                                 fontSize = 13.sp,
-                                color = TextSecondaryLight,
-                                lineHeight = 18.sp
+                                color = PrimaryDarkTeal,
+                                lineHeight = 20.sp,
+                                modifier = Modifier.padding(14.dp),
+                                textAlign = TextAlign.Center
                             )
-
-                            Spacer(modifier = Modifier.height(4.dp))
-
-                            Button(
-                                onClick = { viewModel.openExam(exam.id) },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(48.dp)
-                                    .testTag("start_exam_btn_${exam.id}"),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryDarkTeal)
-                            ) {
-                                Text(
-                                    text = "بدء الامتحان ونموذج التصحيح",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 15.sp
-                                )
-                            }
                         }
+                    }
+                }
+
+                // 1. زر «امتحانات محلية»
+                item {
+                    ExamCategoryHeaderButton(
+                        title = "امتحانات محلية",
+                        subtitle = "مرتبة زمنياً حسب تاريخ الوضع (من 2018 إلى 2025)",
+                        count = localExams.size,
+                        isExpanded = isLocalExpanded,
+                        onClick = { isLocalExpanded = !isLocalExpanded },
+                        testTag = "btn_category_local_exams"
+                    )
+                }
+
+                if (isLocalExpanded) {
+                    items(localExams) { exam ->
+                        ExamItemCard(
+                            exam = exam,
+                            onOpenExam = { viewModel.openExam(exam.id) }
+                        )
+                    }
+                }
+
+                // 2. زر «تقويمات الوحدات الدراسية»
+                item {
+                    ExamCategoryHeaderButton(
+                        title = "تقويمات الوحدات الدراسية",
+                        subtitle = "تقويمات الوحدات 1 و2 و3 والتقويم الإجمالي للأسدس",
+                        count = unitAssessments.size,
+                        isExpanded = isAssessmentsExpanded,
+                        onClick = { isAssessmentsExpanded = !isAssessmentsExpanded },
+                        testTag = "btn_category_unit_assessments"
+                    )
+                }
+
+                if (isAssessmentsExpanded) {
+                    items(unitAssessments) { exam ->
+                        ExamItemCard(
+                            exam = exam,
+                            onOpenExam = { viewModel.openExam(exam.id) }
+                        )
+                    }
+                }
+
+                // 3. زر «الفروض المنزلية»
+                item {
+                    ExamCategoryHeaderButton(
+                        title = "الفروض المنزلية",
+                        subtitle = "الفرض المنزلي الأول للأسدس الأول مع عناصر الإجابة",
+                        count = homeworkExams.size,
+                        isExpanded = isHomeworkExpanded,
+                        onClick = { isHomeworkExpanded = !isHomeworkExpanded },
+                        testTag = "btn_category_homework"
+                    )
+                }
+
+                if (isHomeworkExpanded) {
+                    items(homeworkExams) { exam ->
+                        ExamItemCard(
+                            exam = exam,
+                            onOpenExam = { viewModel.openExam(exam.id) }
+                        )
                     }
                 }
 
@@ -709,3 +672,214 @@ private fun LessonItemCard(
         }
     }
 }
+
+@Composable
+private fun ExamItemCard(
+    exam: com.example.model.ExamData,
+    onOpenExam: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("exam_card_${exam.id}"),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(GoldLight.copy(alpha = 0.35f))
+                        .border(1.dp, GoldAccent, RoundedCornerShape(8.dp))
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "${exam.declaredTotal} / 20 نقطة",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = PrimaryDarkTeal
+                    )
+                }
+
+                Text(
+                    text = exam.title,
+                    fontFamily = AmiriFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = PrimaryDarkTeal,
+                    modifier = Modifier.weight(1f, fill = false),
+                    textAlign = TextAlign.End
+                )
+            }
+
+            if (exam.source.isNotBlank()) {
+                Text(
+                    text = "المصدر: ${exam.source}",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = TextSecondaryLight,
+                    lineHeight = 17.sp
+                )
+            }
+
+            if (exam.passage.title.isNotBlank()) {
+                Text(
+                    text = "نص الانطلاق: «${exam.passage.title}»",
+                    fontFamily = AmiriFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 15.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (exam.unit != null) "الوحدة ${exam.unit}" else "امتحان محلي موحد",
+                    fontSize = 12.sp,
+                    color = TextSecondaryLight
+                )
+                Text(text = "•", fontSize = 12.sp, color = TextMutedLight)
+                Text(
+                    text = "المدة: ${exam.duration}",
+                    fontSize = 12.sp,
+                    color = TextSecondaryLight
+                )
+            }
+
+            Text(
+                text = "المجالات: القراءة والفهم (8 ن) • الدرس اللغوي (6 ن) • التعبير والإنشاء (6 ن) مع التصحيح وسلم التنقيط.",
+                fontSize = 13.sp,
+                color = TextSecondaryLight,
+                lineHeight = 18.sp
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Button(
+                onClick = onOpenExam,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .testTag("start_exam_btn_${exam.id}"),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryDarkTeal)
+            ) {
+                Text(
+                    text = "بدء الامتحان ونموذج التصحيح",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    softWrap = false,
+                    maxLines = 1
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExamCategoryHeaderButton(
+    title: String,
+    subtitle: String,
+    count: Int,
+    isExpanded: Boolean,
+    onClick: () -> Unit,
+    testTag: String
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .testTag(testTag),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isExpanded) PrimaryDarkTeal else MaterialTheme.colorScheme.surface
+        ),
+        border = androidx.compose.foundation.BorderStroke(
+            width = if (isExpanded) 1.5.dp else 1.dp,
+            color = if (isExpanded) GoldAccent else BorderLight
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isExpanded) 3.dp else 1.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(if (isExpanded) GoldAccent else PrimaryDarkTeal.copy(alpha = 0.1f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (isExpanded) "طي" else "عرض",
+                        tint = if (isExpanded) PrimaryDarkTeal else PrimaryDarkTeal,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isExpanded) GoldAccent else GoldLight)
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                ) {
+                    Text(
+                        text = "$count نماذج",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        color = PrimaryDarkTeal
+                    )
+                }
+            }
+
+            Column(
+                horizontalAlignment = Alignment.End,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 12.dp)
+            ) {
+                Text(
+                    text = title,
+                    fontFamily = AmiriFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = if (isExpanded) Color.White else PrimaryDarkTeal,
+                    textAlign = TextAlign.End
+                )
+                Text(
+                    text = subtitle,
+                    fontSize = 12.sp,
+                    color = if (isExpanded) Color.White.copy(alpha = 0.85f) else TextSecondaryLight,
+                    textAlign = TextAlign.End,
+                    maxLines = 1
+                )
+            }
+        }
+    }
+}
+
+

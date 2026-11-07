@@ -8,6 +8,7 @@ data class ExamData(
     val type: String = "exam",
     val order: Int = 1,
     val title: String,
+    val source: String = "",
     val subject: String = "",
     val duration: String = "",
     val declaredTotal: Int = 20,

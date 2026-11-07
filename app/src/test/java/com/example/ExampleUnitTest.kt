@@ -46,12 +46,13 @@ class ExampleUnitTest {
     }
 
     @Test
-    fun testAllFourExamFiles() {
+    fun testAllFiveExamFiles() {
         val examFiles = listOf(
-            "exam-s1-homework-1.json",
-            "exam-s1-general-assessment.json",
+            "exam-s1-unit1-assessment.json",
             "exam-s1-unit2-assessment.json",
-            "exam-s1-unit3-assessment.json"
+            "exam-s1-unit3-assessment.json",
+            "exam-s1-general-assessment.json",
+            "exam-s1-homework-1.json"
         )
 
         for (filename in examFiles) {
@@ -68,5 +69,37 @@ class ExampleUnitTest {
             assertTrue("Must contain sections in $filename", content.contains("\"sections\""))
             assertTrue("Must contain answer_groups or rubric in $filename", content.contains("answer_groups") || content.contains("rubric"))
         }
+    }
+
+    @Test
+    fun testLocalExamsModelsJsonStructure() {
+        val jsonFile = File("src/main/assets/local-exams-models.json")
+        val file = if (jsonFile.exists()) jsonFile else File("app/src/main/assets/local-exams-models.json")
+        assertTrue("local-exams-models.json must exist", file.exists())
+        val content = file.readText()
+
+        val localExamIds = listOf(
+            "local-exam-2018-2019-tolerance",
+            "local-exam-tanseefet-2020-islam",
+            "local-exam-tazart-2025-body-health",
+            "local-exam-yousfia-2022-human",
+            "local-exam-tanseefet-2025-hollywood",
+            "local-exam-ibn-battuta-2022-2023"
+        )
+        for (examId in localExamIds) {
+            assertTrue("local-exams-models.json must contain $examId", content.contains(examId))
+        }
+
+        val declaredTotals = Regex("\"declared_total\"\\s*:\\s*(\\d+)").findAll(content).map { it.groupValues[1].toInt() }.toList()
+        assertEquals("Must have 6 declared_total entries", 6, declaredTotals.size)
+        assertTrue("All declared_total must be 20", declaredTotals.all { it == 20 })
+
+        val sourceCount = Regex("\"source\"\\s*:\\s*\"").findAll(content).count()
+        assertEquals("All 6 exams must have a source", 6, sourceCount)
+
+        assertTrue("Must contain section A", content.contains("\"id\": \"A\""))
+        assertTrue("Must contain section B", content.contains("\"id\": \"B\""))
+        assertTrue("Must contain section C", content.contains("\"id\": \"C\""))
+        assertTrue("Must contain note_for_teacher", content.contains("note_for_teacher"))
     }
 }

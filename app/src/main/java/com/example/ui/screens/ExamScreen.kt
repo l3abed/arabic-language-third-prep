@@ -31,9 +31,14 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Send
+import androidx.compose.material.icons.outlined.Timer
+import kotlinx.coroutines.delay
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -49,6 +54,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -115,16 +121,44 @@ fun ExamScreen(viewModel: ArabicAppViewModel) {
 
     val currentExam = exam!!
 
+    // Parse duration in seconds if specified (e.g., "ساعة" -> 3600s, "ساعتان" -> 7200s, "45 دقيقة" -> 2700s)
+    val totalDurationSeconds = remember(currentExam.id, currentExam.duration) {
+        val d = currentExam.duration.trim()
+        when {
+            d.contains("ساعتان") || d.contains("ساعتين") -> 7200
+            d.contains("ساعة ونصف") -> 5400
+            d.contains("ساعة") -> 3600
+            d.contains("45") -> 2700
+            d.contains("30") || d.contains("نصف ساعة") -> 1800
+            else -> null // "مرنة" or unspecified
+        }
+    }
+
+    var remainingSeconds by remember(currentExam.id) {
+        mutableStateOf(totalDurationSeconds ?: 0)
+    }
+    var isTimerRunning by remember(currentExam.id) {
+        mutableStateOf(!isSubmitted && totalDurationSeconds != null)
+    }
+
+    // Timer countdown effect
+    LaunchedEffect(isTimerRunning, remainingSeconds, isSubmitted) {
+        if (isTimerRunning && !isSubmitted && remainingSeconds > 0) {
+            delay(1000L)
+            remainingSeconds -= 1
+        }
+    }
+
     Scaffold(
         topBar = {
             Surface(
-                color = PrimaryDarkTeal,
+                color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 12.dp),
+                        .padding(horizontal = 8.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(
@@ -138,6 +172,26 @@ fun ExamScreen(viewModel: ArabicAppViewModel) {
                         )
                     }
 
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (viewModel.isTeacherMode) GoldAccent else Color.White.copy(alpha = 0.18f))
+                            .clickable { viewModel.toggleTeacherMode() }
+                            .padding(horizontal = 8.dp, vertical = 5.dp)
+                            .testTag("teacher_mode_toggle_btn")
+                    ) {
+                        Text(
+                            text = if (viewModel.isTeacherMode) "وضع الأستاذ" else "وضع المتعلّم",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (viewModel.isTeacherMode) PrimaryDarkTeal else Color.White,
+                            softWrap = false,
+                            maxLines = 1
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
                     Column(
                         modifier = Modifier.weight(1f),
                         horizontalAlignment = Alignment.End
@@ -146,9 +200,10 @@ fun ExamScreen(viewModel: ArabicAppViewModel) {
                             text = currentExam.title,
                             fontFamily = AmiriFontFamily,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp,
+                            fontSize = 17.sp,
                             color = Color.White,
-                            textAlign = TextAlign.End
+                            textAlign = TextAlign.End,
+                            maxLines = 1
                         )
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -185,6 +240,141 @@ fun ExamScreen(viewModel: ArabicAppViewModel) {
                 .padding(horizontal = 16.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Exam Timer Card (for timed assessments and exams)
+            if (totalDurationSeconds != null) {
+                val hours = remainingSeconds / 3600
+                val minutes = (remainingSeconds % 3600) / 60
+                val seconds = remainingSeconds % 60
+                val timeString = if (hours > 0) {
+                    String.format("%02d:%02d:%02d", hours, minutes, seconds)
+                } else {
+                    String.format("%02d:%02d", minutes, seconds)
+                }
+
+                val isTimeUp = remainingSeconds <= 0
+                val isUrgent = remainingSeconds in 1..300 // under 5 minutes
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = when {
+                            isTimeUp -> ErrorBgLight
+                            isUrgent -> Color(0xFFFFF3E0)
+                            else -> MaterialTheme.colorScheme.surfaceVariant
+                        }
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        when {
+                                            isTimeUp -> ErrorRed.copy(alpha = 0.15f)
+                                            isUrgent -> Color(0xFFE65100).copy(alpha = 0.15f)
+                                            else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                        }
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (isTimerRunning) Icons.Filled.Timer else Icons.Outlined.Timer,
+                                    contentDescription = "المؤقت",
+                                    tint = when {
+                                        isTimeUp -> ErrorRed
+                                        isUrgent -> Color(0xFFE65100)
+                                        else -> MaterialTheme.colorScheme.primary
+                                    },
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+
+                            Column {
+                                Text(
+                                    text = when {
+                                        isSubmitted -> "انتهى وقت الفرض وتم التسليم"
+                                        isTimeUp -> "انتهى الوقت المحدد للاختبار!"
+                                        isUrgent -> "الوقت المتبقي قارب على الانتهاء"
+                                        else -> "مؤقت حل الاختبار (${currentExam.duration})"
+                                    },
+                                    fontSize = 12.sp,
+                                    color = when {
+                                        isTimeUp -> ErrorRed
+                                        isUrgent -> Color(0xFFE65100)
+                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    text = if (isTimeUp) "00:00:00" else timeString,
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = AmiriFontFamily,
+                                    color = when {
+                                        isTimeUp -> ErrorRed
+                                        isUrgent -> Color(0xFFD84315)
+                                        else -> MaterialTheme.colorScheme.primary
+                                    }
+                                )
+                            }
+                        }
+
+                        // Play / Pause / Reset Controls for student
+                        if (!isSubmitted) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(
+                                    onClick = { isTimerRunning = !isTimerRunning },
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.surface)
+                                ) {
+                                    Icon(
+                                        imageVector = if (isTimerRunning) Icons.Outlined.Pause else Icons.Filled.PlayArrow,
+                                        contentDescription = if (isTimerRunning) "إيقاف مؤقت" else "تشغيل المؤقت",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = {
+                                        remainingSeconds = totalDurationSeconds
+                                        isTimerRunning = true
+                                    },
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.surface)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Refresh,
+                                        contentDescription = "إعادة ضبط المؤقت",
+                                        tint = TextSecondaryLight,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             // Header Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -245,6 +435,17 @@ fun ExamScreen(viewModel: ArabicAppViewModel) {
                         )
                     }
 
+                    if (currentExam.source.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "المصدر: ${currentExam.source}",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = TextSecondaryLight,
+                            textAlign = TextAlign.Start
+                        )
+                    }
+
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
                         text = if (isSubmitted) {
@@ -260,38 +461,77 @@ fun ExamScreen(viewModel: ArabicAppViewModel) {
                 }
             }
 
-            // Note to teacher alert if totals mismatch or note exists
-            if (!currentExam.isTotalValid || currentExam.noteForTeacher.isNotBlank()) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = GoldLight.copy(alpha = 0.35f)),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, GoldAccent)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
+            // Note to teacher / mismatch alert: strictly shown ONLY when isTeacherMode is true
+            if (viewModel.isTeacherMode) {
+                if (!currentExam.isTotalValid) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = GoldLight.copy(alpha = 0.35f)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, GoldAccent)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = null,
-                            tint = PrimaryDarkTeal,
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Text(
-                            text = if (currentExam.noteForTeacher.isNotBlank()) {
-                                currentExam.noteForTeacher
-                            } else {
-                                "مجموع نقط المجالات (${currentExam.totalPoints} ن) لا يطابق المجموع المعلن (${currentExam.declaredTotal} ن)."
-                            },
-                            color = PrimaryDarkTeal,
-                            fontSize = 13.sp,
-                            lineHeight = 18.sp,
-                            fontWeight = FontWeight.Medium
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                tint = PrimaryDarkTeal,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Text(
+                                text = "تنبيه خاص بالأستاذ: مجموع نقط المجالات (${currentExam.totalPoints} ن) لا يطابق المجموع المعلن (${currentExam.declaredTotal} ن).",
+                                color = PrimaryDarkTeal,
+                                fontSize = 13.sp,
+                                lineHeight = 18.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+
+                if (currentExam.noteForTeacher.isNotBlank()) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = GoldLight.copy(alpha = 0.35f)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, GoldAccent)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = PrimaryDarkTeal,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    text = "ملاحظة توجيهية خاصة بالأستاذ:",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = PrimaryDarkTeal
+                                )
+                            }
+                            Text(
+                                text = currentExam.noteForTeacher,
+                                fontFamily = AmiriFontFamily,
+                                fontSize = 14.sp,
+                                lineHeight = 22.sp,
+                                color = PrimaryDarkTeal
+                            )
+                        }
                     }
                 }
             }
@@ -379,6 +619,7 @@ fun ExamScreen(viewModel: ArabicAppViewModel) {
                     section = section,
                     isSubmitted = isSubmitted,
                     showCorrection = showCorrection,
+                    isTeacherMode = viewModel.isTeacherMode,
                     examAnswers = viewModel.examAnswers,
                     selectedTopicId = viewModel.getSelectedExamTopic(currentExam.id, section.id),
                     onSelectTopic = { topicId ->
@@ -537,20 +778,6 @@ private fun PassageCard(
                 }
             }
 
-            if (title.isNotBlank()) {
-                Text(
-                    text = title,
-                    fontFamily = AmiriFontFamily,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = (20 * fontScale).sp,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    textAlign = TextAlign.Start
-                )
-            }
-
             AnimatedVisibility(
                 visible = isExpanded,
                 enter = fadeIn() + expandVertically(),
@@ -570,6 +797,26 @@ private fun PassageCard(
                         textAlign = TextAlign.Justify,
                         modifier = Modifier.fillMaxWidth()
                     )
+                    if (title.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(GoldLight.copy(alpha = 0.35f))
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "عنوان النص: «$title»",
+                                fontFamily = AmiriFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = (16 * fontScale).sp,
+                                color = PrimaryDarkTeal,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -582,6 +829,7 @@ private fun SectionCard(
     section: ExamSection,
     isSubmitted: Boolean,
     showCorrection: Boolean,
+    isTeacherMode: Boolean = false,
     examAnswers: Map<String, String>,
     selectedTopicId: String?,
     onSelectTopic: (String) -> Unit,
@@ -668,6 +916,7 @@ private fun SectionCard(
                     studentWriting = studentWriting,
                     isSubmitted = isSubmitted,
                     showCorrection = showCorrection,
+                    isTeacherMode = isTeacherMode,
                     onWritingChange = { onAnswerChange(writingKey, it) },
                     fontScale = fontScale
                 )
@@ -942,6 +1191,7 @@ private fun WritingSectionCard(
     studentWriting: String,
     isSubmitted: Boolean,
     showCorrection: Boolean,
+    isTeacherMode: Boolean = false,
     onWritingChange: (String) -> Unit,
     fontScale: Float
 ) {
@@ -1205,11 +1455,11 @@ private fun WritingSectionCard(
                     }
                 }
 
-                // Model Text or Points for Writing
+                // Model Text or Points for Writing (strictly for teacher only)
                 val modelPointsToShow = activeTopic?.modelPoints?.ifEmpty { null } ?: section.modelPoints.ifEmpty { null }
                 val modelTextToShow = activeTopic?.modelText ?: section.modelText
 
-                if (modelPointsToShow != null || modelTextToShow != null) {
+                if (isTeacherMode && (modelPointsToShow != null || modelTextToShow != null)) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(10.dp),
@@ -1234,7 +1484,7 @@ private fun WritingSectionCard(
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Text(
-                                    text = "عناصر الموضوع الإنشائي النموذجي:",
+                                    text = "عناصر الموضوع الإنشائي النموذجي (خاص بالأستاذ):",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp,
                                     color = PrimaryDarkTeal

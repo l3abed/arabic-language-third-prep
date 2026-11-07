@@ -8,20 +8,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 private val DarkColorScheme = darkColorScheme(
-    primary = GoldAccent,
-    onPrimary = PrimaryDarkTealDark,
-    primaryContainer = PrimaryDarkTeal,
-    onPrimaryContainer = GoldLight,
-    secondary = GoldAccent,
-    onSecondary = PrimaryDarkTealDark,
-    background = AppBackgroundDark,
+    primary = NightBluePrimary,
+    onPrimary = Color.White,
+    primaryContainer = NightBlueSurfaceVariant,
+    onPrimaryContainer = Color.White,
+    secondary = NightGoldAccent,
+    onSecondary = NightBlueBackground,
+    background = NightBlueBackground,
     onBackground = TextPrimaryDark,
-    surface = AppSurfaceDark,
+    surface = NightBlueSurface,
     onSurface = TextPrimaryDark,
-    surfaceVariant = AppSurfaceVariantDark,
+    surfaceVariant = NightBlueSurfaceVariant,
     onSurfaceVariant = TextSecondaryDark,
-    outline = BorderDark,
-    outlineVariant = BorderDark
+    outline = NightBlueBorder,
+    outlineVariant = NightBlueBorder
 )
 
 private val LightColorScheme = lightColorScheme(

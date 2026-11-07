@@ -435,16 +435,17 @@ class LessonRepository(private val context: Context) {
             Triple("texts", "النصوص القرائية والشعرية", "نص + شرح + أسئلة الفهم"),
             Triple("language", "الدرس اللغوي", "قاعدة + أمثلة + إعراب وتطبيق"),
             Triple("writing", "التعبير والإنشاء", "خطوات الكتابة + نماذج مُنجزة"),
-            Triple("exams", "نماذج الامتحانات", "4 امتحانات شاملة مع سلم التنقيط")
+            Triple("exams", "نماذج الامتحانات", "امتحانات محلية موحدة وفروض مصححة")
         )
 
         return componentDefs.map { (id, title, subtitle) ->
             if (id == "exams") {
+                val allExamsCount = getAllExams().size
                 ComponentInfo(
                     id = id,
                     title = title,
                     subtitle = subtitle,
-                    totalLessons = 4,
+                    totalLessons = if (allExamsCount > 0) allExamsCount else 11,
                     completedLessons = 0
                 )
             } else {
@@ -463,13 +464,14 @@ class LessonRepository(private val context: Context) {
     }
 
     private val examAssetFiles = listOf(
-        "exam-s1-homework-1.json",
-        "exam-s1-general-assessment.json",
+        "exam-s1-unit1-assessment.json",
         "exam-s1-unit2-assessment.json",
-        "exam-s1-unit3-assessment.json"
+        "exam-s1-unit3-assessment.json",
+        "exam-s1-general-assessment.json",
+        "exam-s1-homework-1.json"
     )
 
-    fun getAllExams(): List<ExamData> {
+    fun getStandardExams(): List<ExamData> {
         return examAssetFiles.mapNotNull { filename ->
             try {
                 val jsonString = context.assets.open(filename).bufferedReader().use { it.readText() }
@@ -479,6 +481,46 @@ class LessonRepository(private val context: Context) {
                 null
             }
         }
+    }
+
+    fun getLocalExams(): List<ExamData> {
+        val list = try {
+            val jsonString = context.assets.open("local-exams-models.json").bufferedReader().use { it.readText() }
+            val root = JSONObject(jsonString)
+            val examsArray = root.optJSONArray("exams") ?: JSONArray()
+            val parsedList = mutableListOf<ExamData>()
+            for (i in 0 until examsArray.length()) {
+                val obj = examsArray.getJSONObject(i)
+                parsedList.add(parseExamJsonObject(obj))
+            }
+            parsedList
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
+        }
+
+        // Chronological order based on date of placement (2018/2019 -> 2020 -> 2022 -> 2022/2023 -> 2025)
+        val chronologicalDateOrder = listOf(
+            "local-exam-2018-2019-tolerance",    // 2018/2019
+            "local-exam-tanseefet-2020-islam",    // 2020
+            "local-exam-yousfia-2022-human",     // 2022
+            "local-exam-ibn-battuta-2022-2023",  // 2022/2023
+            "local-exam-tazart-2025-body-health", // 2025 (يناير)
+            "local-exam-tanseefet-2025-hollywood" // 2025 (يناير)
+        )
+
+        return list.sortedBy { exam ->
+            val idx = chronologicalDateOrder.indexOf(exam.id)
+            if (idx >= 0) idx else 99
+        }
+    }
+
+    fun getAllExams(): List<ExamData> {
+        val standard = getStandardExams()
+        val local = getLocalExams()
+        val localIds = local.map { it.id }.toSet()
+        val filteredStandard = standard.filter { !localIds.contains(it.id) }
+        return filteredStandard + local
     }
 
     fun getExamById(examId: String): ExamData? {
@@ -497,7 +539,10 @@ class LessonRepository(private val context: Context) {
     }
 
     private fun parseExamJson(jsonString: String): ExamData {
-        val root = JSONObject(jsonString)
+        return parseExamJsonObject(JSONObject(jsonString))
+    }
+
+    fun parseExamJsonObject(root: JSONObject): ExamData {
         val id = root.optString("id", "exam-s1-homework-1")
         val component = root.optString("component", "exams")
         val semester = root.optInt("semester", 1)
@@ -505,6 +550,7 @@ class LessonRepository(private val context: Context) {
         val type = root.optString("type", "exam")
         val order = root.optInt("order", 1)
         val title = root.optString("title", "الفرض المحروس")
+        val source = root.optString("source", "")
         val subject = root.optString("subject", "")
         val duration = root.optString("duration", "مرنة")
         val declaredTotal = root.optInt("declared_total", 20)
@@ -645,6 +691,7 @@ class LessonRepository(private val context: Context) {
             type = type,
             order = order,
             title = title,
+            source = source,
             subject = subject,
             duration = duration,
             declaredTotal = declaredTotal,

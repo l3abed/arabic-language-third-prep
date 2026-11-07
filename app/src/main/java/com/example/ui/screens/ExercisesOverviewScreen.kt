@@ -46,6 +46,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.Lesson
@@ -70,6 +71,7 @@ fun ExercisesOverviewScreen(
     val allExams = viewModel.allExams
 
     var selectedUnitFilter by remember { mutableStateOf<Int?>(null) }
+    var selectedExamCategory by remember { mutableStateOf<String?>("local") }
 
     val filteredLessons = remember(lessons, selectedUnitFilter) {
         if (selectedUnitFilter == null) {
@@ -103,40 +105,91 @@ fun ExercisesOverviewScreen(
             )
         }
 
-        // Section 1: All 4 Exams / Assessments
+        // Section 1: Exams / Assessments
         item {
             Spacer(modifier = Modifier.height(4.dp))
-            Row(
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(
-                    text = "نماذج الامتحانات والفروض (4 نماذج)",
-                    fontFamily = AmiriFontFamily,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 19.sp,
-                    color = PrimaryDarkTeal
-                )
-                TextButton(
-                    onClick = {
-                        viewModel.setUnitFilter(null)
-                        viewModel.setComponentFilter("exams")
-                        viewModel.selectTab(NavTab.LESSONS)
-                    }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "عرض الكل",
-                        color = GoldAccent,
+                        text = "نماذج الامتحانات والفروض (${allExams.size} نماذج)",
+                        fontFamily = AmiriFontFamily,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp
+                        fontSize = 19.sp,
+                        color = PrimaryDarkTeal
+                    )
+                    TextButton(
+                        onClick = {
+                            viewModel.setUnitFilter(null)
+                            viewModel.setComponentFilter("exams")
+                            viewModel.selectTab(NavTab.LESSONS)
+                        }
+                    ) {
+                        Text(
+                            text = "عرض الكل",
+                            color = GoldAccent,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+
+                // 3 Category Chips matching the requested categories
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = selectedExamCategory == "local",
+                        onClick = { selectedExamCategory = if (selectedExamCategory == "local") null else "local" },
+                        label = { Text("امتحانات محلية (${viewModel.localExams.size})", fontSize = 13.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = PrimaryDarkTeal,
+                            selectedLabelColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(20.dp)
+                    )
+                    FilterChip(
+                        selected = selectedExamCategory == "assessments",
+                        onClick = { selectedExamCategory = if (selectedExamCategory == "assessments") null else "assessments" },
+                        label = { Text("تقويمات الوحدات الدراسية (${viewModel.unitAssessments.size})", fontSize = 13.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = PrimaryDarkTeal,
+                            selectedLabelColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(20.dp)
+                    )
+                    FilterChip(
+                        selected = selectedExamCategory == "homework",
+                        onClick = { selectedExamCategory = if (selectedExamCategory == "homework") null else "homework" },
+                        label = { Text("الفروض المنزلية (${viewModel.homeworkExams.size})", fontSize = 13.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = PrimaryDarkTeal,
+                            selectedLabelColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(20.dp)
                     )
                 }
             }
         }
 
-        // Render each of the 4 exams as a distinct card
-        items(allExams) { exam ->
+        val examsToDisplay = when (selectedExamCategory) {
+            "local" -> viewModel.localExams
+            "assessments" -> viewModel.unitAssessments
+            "homework" -> viewModel.homeworkExams
+            else -> allExams
+        }
+
+        // Render exams as distinct cards
+        items(examsToDisplay) { exam ->
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -176,7 +229,18 @@ fun ExercisesOverviewScreen(
                             fontFamily = AmiriFontFamily,
                             fontWeight = FontWeight.Bold,
                             fontSize = 18.sp,
-                            color = PrimaryDarkTeal
+                            color = PrimaryDarkTeal,
+                            modifier = Modifier.weight(1f, fill = false),
+                            textAlign = TextAlign.End
+                        )
+                    }
+
+                    if (exam.source.isNotBlank()) {
+                        Text(
+                            text = "المصدر: ${exam.source}",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = TextSecondaryLight
                         )
                     }
 
