@@ -47,7 +47,10 @@ class ArabicAppViewModel(application: Application) : AndroidViewModel(applicatio
                 "exam-s1-unit1-assessment",
                 "exam-s1-unit2-assessment",
                 "exam-s1-unit3-assessment",
-                "exam-s1-general-assessment"
+                "exam-s1-general-assessment",
+                "exam-s2-unit4-assessment",
+                "exam-s2-unit5-assessment",
+                "exam-s2-unit6-assessment"
             )
             return list.sortedBy { exam ->
                 val idx = assessmentOrder.indexOf(exam.id)
