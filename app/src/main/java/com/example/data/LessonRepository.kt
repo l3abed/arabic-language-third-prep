@@ -514,10 +514,17 @@ class LessonRepository(private val context: Context) {
                     "order_words" -> {
                         val words = jsonArrayToStringList(eObj.optJSONArray("words"))
                         val answer = jsonArrayToStringList(eObj.optJSONArray("answer"))
+                        val altArray = eObj.optJSONArray("alternatives") ?: JSONArray()
+                        val alternatives = mutableListOf<List<String>>()
+                        for (a in 0 until altArray.length()) {
+                            val inner = altArray.optJSONArray(a) ?: continue
+                            alternatives.add(jsonArrayToStringList(inner))
+                        }
                         exercisesList.add(ExerciseItem.OrderWords(
                             words = words,
                             answer = answer,
-                            explanation = explanation
+                            explanation = explanation,
+                            alternatives = alternatives
                         ))
                     }
                 }
