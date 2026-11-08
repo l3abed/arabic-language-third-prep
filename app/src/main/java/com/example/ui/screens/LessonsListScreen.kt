@@ -126,6 +126,21 @@ fun LessonsListScreen(
                 onClick = { viewModel.setUnitFilter(3) }
             )
             FilterChipItem(
+                label = "الوحدة 4: الاجتماعي والاقتصادي",
+                isSelected = selectedUnit == 4,
+                onClick = { viewModel.setUnitFilter(4) }
+            )
+            FilterChipItem(
+                label = "الوحدة 5: المجال السكاني",
+                isSelected = selectedUnit == 5,
+                onClick = { viewModel.setUnitFilter(5) }
+            )
+            FilterChipItem(
+                label = "الوحدة 6: الفني والثقافي",
+                isSelected = selectedUnit == 6,
+                onClick = { viewModel.setUnitFilter(6) }
+            )
+            FilterChipItem(
                 label = "كافة الوحدات",
                 isSelected = selectedUnit == null,
                 onClick = { viewModel.setUnitFilter(null) }

@@ -263,6 +263,9 @@ fun ExercisesOverviewScreen(
                                 1 -> "الوحدة الأولى: القيم الإسلامية"
                                 2 -> "الوحدة الثانية: القيم الوطنية والإنسانية"
                                 3 -> "الوحدة الثالثة: المجال الحضاري"
+                                4 -> "الوحدة الرابعة: المجال الاجتماعي والاقتصادي"
+                                5 -> "الوحدة الخامسة: المجال السكاني"
+                                6 -> "الوحدة السادسة: المجال الفني والثقافي"
                                 else -> "الأسدس الأول: تقويم إجمالي شامل"
                             },
                             fontSize = 12.sp,
@@ -333,7 +336,7 @@ fun ExercisesOverviewScreen(
                         onClick = { selectedUnitFilter = null },
                         label = {
                             Text(
-                                text = "كافة الوحدات (21)",
+                                text = "كافة الوحدات (${lessons.size})",
                                 fontSize = 13.sp,
                                 fontWeight = if (selectedUnitFilter == null) FontWeight.Bold else FontWeight.Normal
                             )
@@ -352,7 +355,7 @@ fun ExercisesOverviewScreen(
                         onClick = { selectedUnitFilter = 1 },
                         label = {
                             Text(
-                                text = "الوحدة 1: القيم الإسلامية (7)",
+                                text = "الوحدة 1: القيم الإسلامية (${lessons.count { it.unit == 1 }})",
                                 fontSize = 13.sp,
                                 fontWeight = if (selectedUnitFilter == 1) FontWeight.Bold else FontWeight.Normal
                             )
@@ -371,7 +374,7 @@ fun ExercisesOverviewScreen(
                         onClick = { selectedUnitFilter = 2 },
                         label = {
                             Text(
-                                text = "الوحدة 2: الوطنية والإنسانية (7)",
+                                text = "الوحدة 2: الوطنية والإنسانية (${lessons.count { it.unit == 2 }})",
                                 fontSize = 13.sp,
                                 fontWeight = if (selectedUnitFilter == 2) FontWeight.Bold else FontWeight.Normal
                             )
@@ -390,9 +393,66 @@ fun ExercisesOverviewScreen(
                         onClick = { selectedUnitFilter = 3 },
                         label = {
                             Text(
-                                text = "الوحدة 3: المجال الحضاري (7)",
+                                text = "الوحدة 3: المجال الحضاري (${lessons.count { it.unit == 3 }})",
                                 fontSize = 13.sp,
                                 fontWeight = if (selectedUnitFilter == 3) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = PrimaryDarkTeal,
+                            selectedLabelColor = Color.White,
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            labelColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        shape = RoundedCornerShape(20.dp)
+                    )
+
+                    FilterChip(
+                        selected = selectedUnitFilter == 4,
+                        onClick = { selectedUnitFilter = 4 },
+                        label = {
+                            Text(
+                                text = "الوحدة 4: الاجتماعي والاقتصادي (${lessons.count { it.unit == 4 }})",
+                                fontSize = 13.sp,
+                                fontWeight = if (selectedUnitFilter == 4) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = PrimaryDarkTeal,
+                            selectedLabelColor = Color.White,
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            labelColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        shape = RoundedCornerShape(20.dp)
+                    )
+
+                    FilterChip(
+                        selected = selectedUnitFilter == 5,
+                        onClick = { selectedUnitFilter = 5 },
+                        label = {
+                            Text(
+                                text = "الوحدة 5: المجال السكاني (${lessons.count { it.unit == 5 }})",
+                                fontSize = 13.sp,
+                                fontWeight = if (selectedUnitFilter == 5) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = PrimaryDarkTeal,
+                            selectedLabelColor = Color.White,
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            labelColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        shape = RoundedCornerShape(20.dp)
+                    )
+
+                    FilterChip(
+                        selected = selectedUnitFilter == 6,
+                        onClick = { selectedUnitFilter = 6 },
+                        label = {
+                            Text(
+                                text = "الوحدة 6: الفني والثقافي (${lessons.count { it.unit == 6 }})",
+                                fontSize = 13.sp,
+                                fontWeight = if (selectedUnitFilter == 6) FontWeight.Bold else FontWeight.Normal
                             )
                         },
                         colors = FilterChipDefaults.filterChipColors(

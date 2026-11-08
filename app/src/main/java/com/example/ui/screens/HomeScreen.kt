@@ -119,7 +119,10 @@ fun HomeScreen(
     val unitsList = listOf(
         UnitItem(1, "الوحدة الأولى", "مجال القيم الإسلامية"),
         UnitItem(2, "الوحدة الثانية", "مجال القيم الوطنية والإنسانية"),
-        UnitItem(3, "الوحدة الثالثة", "المجال الحضاري")
+        UnitItem(3, "الوحدة الثالثة", "المجال الحضاري"),
+        UnitItem(4, "الوحدة الرابعة", "المجال الاجتماعي والاقتصادي"),
+        UnitItem(5, "الوحدة الخامسة", "المجال السكاني"),
+        UnitItem(6, "الوحدة السادسة", "المجال الفني والثقافي")
     )
 
     LazyColumn(
@@ -461,8 +464,8 @@ fun HomeScreen(
                 item {
                     ExamCategoryCard(
                         title = "تقويمات الوحدات الدراسية",
-                        subtitle = "تقويم الوحدة 1، والوحدة 2، والوحدة 3، والتقويم الإجمالي للأسدس",
-                        countText = "4 تقويمات",
+                        subtitle = "تقويمات الوحدات من 1 إلى 6، والتقويم الإجمالي للأسدس الأول",
+                        countText = "${viewModel.unitAssessments.size} تقويمات",
                         icon = Icons.Filled.Assignment,
                         onClick = { selectedExamCategory = "assessments" }
                     )
@@ -548,6 +551,9 @@ fun HomeScreen(
                                 selectedUnitNumber == 1 -> "الوحدة الأولى: القيم الإسلامية"
                                 selectedUnitNumber == 2 -> "الوحدة الثانية: القيم الوطنية والإنسانية"
                                 selectedUnitNumber == 3 -> "الوحدة الثالثة: المجال الحضاري"
+                                selectedUnitNumber == 4 -> "الوحدة الرابعة: المجال الاجتماعي والاقتصادي"
+                                selectedUnitNumber == 5 -> "الوحدة الخامسة: المجال السكاني"
+                                selectedUnitNumber == 6 -> "الوحدة السادسة: المجال الفني والثقافي"
                                 else -> "الدروس"
                             }
                             Text(
