@@ -8,6 +8,9 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -16,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.components.AppBottomNav
 import com.example.ui.screens.AccountScreen
@@ -36,6 +40,27 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // If the previous run crashed, show the stack trace so it can be copied.
+        val crashFile = java.io.File(filesDir, "crash.txt")
+        if (crashFile.exists()) {
+            val crashText = try { crashFile.readText() } catch (_: Exception) { "" }
+            crashFile.delete()
+            setContent {
+                androidx.compose.foundation.text.selection.SelectionContainer {
+                    androidx.compose.material3.Text(
+                        text = crashText,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .statusBarsPadding()
+                            .verticalScroll(rememberScrollState())
+                            .padding(16.dp)
+                    )
+                }
+            }
+            return
+        }
+
         setContent {
             val settings by appViewModel.settings.collectAsState()
 
