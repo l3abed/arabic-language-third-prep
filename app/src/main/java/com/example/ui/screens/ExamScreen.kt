@@ -194,7 +194,7 @@ fun ExamScreen(viewModel: ArabicAppViewModel) {
 
                     Column(
                         modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.End
+                        horizontalAlignment = Alignment.Start
                     ) {
                         Text(
                             text = currentExam.title,
@@ -202,7 +202,7 @@ fun ExamScreen(viewModel: ArabicAppViewModel) {
                             fontWeight = FontWeight.Bold,
                             fontSize = 17.sp,
                             color = Color.White,
-                            textAlign = TextAlign.End,
+                            textAlign = TextAlign.Start,
                             maxLines = 1
                         )
                         Row(
@@ -883,7 +883,7 @@ private fun SectionCard(
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp,
                     color = PrimaryDarkTeal,
-                    textAlign = TextAlign.End
+                    textAlign = TextAlign.Start
                 )
             }
 
@@ -1035,6 +1035,7 @@ private fun QuestionCard(
                 disabledTextColor = MaterialTheme.colorScheme.onSurface
             ),
             textStyle = androidx.compose.ui.text.TextStyle(
+                textDirection = androidx.compose.ui.text.style.TextDirection.Rtl,
                 fontFamily = AmiriFontFamily,
                 fontSize = (16 * fontScale).sp,
                 textAlign = TextAlign.Start,
@@ -1375,6 +1376,7 @@ private fun WritingSectionCard(
                 disabledTextColor = MaterialTheme.colorScheme.onSurface
             ),
             textStyle = androidx.compose.ui.text.TextStyle(
+                textDirection = androidx.compose.ui.text.style.TextDirection.Rtl,
                 fontFamily = AmiriFontFamily,
                 fontSize = (16 * fontScale).sp,
                 lineHeight = (26 * fontScale).sp,
@@ -1449,7 +1451,7 @@ private fun WritingSectionCard(
                                             modifier = Modifier
                                                 .weight(1f)
                                                 .padding(start = 8.dp),
-                                            textAlign = TextAlign.End
+                                            textAlign = TextAlign.Start
                                         )
                                     }
                                 }

@@ -734,7 +734,7 @@ private fun ExamItemCard(
                     fontSize = 18.sp,
                     color = PrimaryDarkTeal,
                     modifier = Modifier.weight(1f, fill = false),
-                    textAlign = TextAlign.End
+                    textAlign = TextAlign.Start
                 )
             }
 
@@ -872,7 +872,7 @@ private fun ExamCategoryHeaderButton(
             }
 
             Column(
-                horizontalAlignment = Alignment.End,
+                horizontalAlignment = Alignment.Start,
                 modifier = Modifier
                     .weight(1f)
                     .padding(start = 12.dp)
@@ -883,13 +883,13 @@ private fun ExamCategoryHeaderButton(
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp,
                     color = if (isExpanded) Color.White else PrimaryDarkTeal,
-                    textAlign = TextAlign.End
+                    textAlign = TextAlign.Start
                 )
                 Text(
                     text = subtitle,
                     fontSize = 12.sp,
                     color = if (isExpanded) Color.White.copy(alpha = 0.85f) else TextSecondaryLight,
-                    textAlign = TextAlign.End,
+                    textAlign = TextAlign.Start,
                     maxLines = 1
                 )
             }

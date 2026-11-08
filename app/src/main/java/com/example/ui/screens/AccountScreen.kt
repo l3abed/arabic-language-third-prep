@@ -679,12 +679,14 @@ fun AccountScreen(
       "type": "order_words",
       "words": ["كلمة 2", "كلمة 1"],
       "answer": ["كلمة 1", "كلمة 2"],
+      "alternatives": [],
       "explanation": "التعليل"
     }
   ]
 }""",
                             fontSize = 11.sp,
                             fontFamily = FontFamily.Monospace,
+                            style = androidx.compose.material3.LocalTextStyle.current.copy(textDirection = androidx.compose.ui.text.style.TextDirection.Ltr),
                             modifier = Modifier.padding(10.dp)
                         )
                     }
@@ -729,7 +731,7 @@ fun AccountScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(280.dp),
-                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace, fontSize = 11.sp, textDirection = androidx.compose.ui.text.style.TextDirection.Ltr)
                     )
                 }
             },

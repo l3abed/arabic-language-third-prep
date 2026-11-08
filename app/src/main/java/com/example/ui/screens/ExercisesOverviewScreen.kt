@@ -231,7 +231,7 @@ fun ExercisesOverviewScreen(
                             fontSize = 18.sp,
                             color = PrimaryDarkTeal,
                             modifier = Modifier.weight(1f, fill = false),
-                            textAlign = TextAlign.End
+                            textAlign = TextAlign.Start
                         )
                     }
 
