@@ -59,6 +59,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.GoldAccent
+import com.example.ui.theme.GoldLight
 import com.example.ui.theme.PrimaryDarkTeal
 import com.example.ui.theme.TextMutedLight
 import com.example.ui.theme.TextSecondaryLight
@@ -78,6 +79,11 @@ fun AccountScreen(
     var showJsonEditorDialog by remember { mutableStateOf(false) }
     var customJsonText by remember { mutableStateOf("") }
     var showGuideDialog by remember { mutableStateOf(false) }
+
+    val mistakeReviewItems by viewModel.mistakeReviewItems.collectAsState()
+    val examHistory by viewModel.examHistory.collectAsState()
+    var showClearMistakesDialog by remember { mutableStateOf(false) }
+    var showClearExamHistoryDialog by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = modifier
@@ -382,6 +388,118 @@ fun AccountScreen(
             }
         }
 
+        // Section: Exam History Records (سجل الامتحانات)
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "سجل الامتحانات المنجزة",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        if (examHistory.isNotEmpty()) {
+                            TextButton(onClick = { showClearExamHistoryDialog = true }) {
+                                Text("مسح السجل", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                            }
+                        }
+                    }
+
+                    if (examHistory.isEmpty()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "لا توجد امتحانات مسلّمة حتى الآن.",
+                            fontSize = 13.sp,
+                            color = TextSecondaryLight
+                        )
+                    } else {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            examHistory.take(5).forEach { record ->
+                                val dateStr = java.text.SimpleDateFormat("yyyy/MM/dd - HH:mm", java.util.Locale.getDefault())
+                                    .format(java.util.Date(record.timestamp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = record.examTitle,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            maxLines = 1,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            text = dateStr,
+                                            fontSize = 11.sp,
+                                            color = TextSecondaryLight
+                                        )
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(GoldLight)
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Text(
+                                            text = "${record.declaredTotal} نقطة",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = PrimaryDarkTeal
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Section: Clear Mistakes (مسح قائمة الأخطاء والمراجعة)
+        if (mistakeReviewItems.isNotEmpty()) {
+            item {
+                OutlinedButton(
+                    onClick = { showClearMistakesDialog = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.RestartAlt,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = "مسح قائمة أخطاء المراجعة (${mistakeReviewItems.size} سؤال)", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
         // Reset Progress
         item {
             OutlinedButton(
@@ -408,6 +526,56 @@ fun AccountScreen(
         item {
             Spacer(modifier = Modifier.height(24.dp))
         }
+    }
+
+    // Clear Mistakes Confirmation Dialog
+    if (showClearMistakesDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearMistakesDialog = false },
+            title = { Text(text = "تأكيد مسح قائمة المراجعة", fontWeight = FontWeight.Bold) },
+            text = { Text("هل تريد مسح جميع الأسئلة المسجلة في قائمة المراجعة التكرارية؟") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.clearMistakes()
+                        showClearMistakesDialog = false
+                        Toast.makeText(context, "تم مسح قائمة المراجعة", Toast.LENGTH_SHORT).show()
+                    }
+                ) {
+                    Text("نعم، مسح", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearMistakesDialog = false }) {
+                    Text("إلغاء")
+                }
+            }
+        )
+    }
+
+    // Clear Exam History Confirmation Dialog
+    if (showClearExamHistoryDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearExamHistoryDialog = false },
+            title = { Text(text = "تأكيد مسح سجل الامتحانات", fontWeight = FontWeight.Bold) },
+            text = { Text("هل أنت متأكد من مسح جميع سجلات الامتحانات المسلّمة؟") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.clearExamHistory()
+                        showClearExamHistoryDialog = false
+                        Toast.makeText(context, "تم مسح سجل الامتحانات", Toast.LENGTH_SHORT).show()
+                    }
+                ) {
+                    Text("نعم، مسح", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearExamHistoryDialog = false }) {
+                    Text("إلغاء")
+                }
+            }
+        )
     }
 
     // Reset Progress Confirmation Dialog

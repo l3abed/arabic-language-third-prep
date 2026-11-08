@@ -187,3 +187,26 @@ data class ComponentInfo(
     val progress: Float
         get() = if (totalLessons > 0) completedLessons.toFloat() / totalLessons else 0f
 }
+
+/**
+ * Represents a mistaken question in exercises for spaced review.
+ */
+data class MistakeReviewItem(
+    val id: String, // lessonId:questionIndex
+    val lessonId: String,
+    val questionIndex: Int,
+    val errorCount: Int,
+    val lastErrorTimestamp: Long,
+    val lessonTitle: String = "",
+    val exercise: ExerciseItem? = null
+)
+
+/**
+ * Record of a completed exam submission.
+ */
+data class ExamHistoryRecord(
+    val examId: String,
+    val examTitle: String,
+    val timestamp: Long,
+    val declaredTotal: Int
+)

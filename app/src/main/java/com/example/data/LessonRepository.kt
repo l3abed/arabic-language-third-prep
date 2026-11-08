@@ -46,6 +46,8 @@ class LessonRepository(private val context: Context) {
         loadSettings()
         loadCompletedLessons()
         loadLessons()
+        loadMistakes()
+        loadExamHistory()
     }
 
     private fun cleanDeprecatedData() {
@@ -228,6 +230,155 @@ class LessonRepository(private val context: Context) {
         }
         editor.apply()
         _completedLessons.value = emptySet()
+    }
+
+    // ==========================================
+    // Spaced Review System (المراجعة المتباعدة للأخطاء)
+    // ==========================================
+    private val _mistakeReviewItems = MutableStateFlow<List<com.example.model.MistakeReviewItem>>(emptyList())
+    val mistakeReviewItems: StateFlow<List<com.example.model.MistakeReviewItem>> = _mistakeReviewItems.asStateFlow()
+
+    fun loadMistakes() {
+        val raw = prefs.getString("mistake_records_json", null) ?: "[]"
+        try {
+            val arr = JSONArray(raw)
+            val list = mutableListOf<com.example.model.MistakeReviewItem>()
+            val lessonsMap = _lessons.value.associateBy { it.id }
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                val lid = obj.getString("lessonId")
+                val qIdx = obj.getInt("questionIndex")
+                val count = obj.getInt("errorCount")
+                val timestamp = obj.getLong("lastErrorTimestamp")
+                val lesson = lessonsMap[lid]
+                val exercise = lesson?.exercises?.getOrNull(qIdx)
+                val lessonTitle = lesson?.title ?: ""
+                list.add(
+                    com.example.model.MistakeReviewItem(
+                        id = "$lid:$qIdx",
+                        lessonId = lid,
+                        questionIndex = qIdx,
+                        errorCount = count,
+                        lastErrorTimestamp = timestamp,
+                        lessonTitle = lessonTitle,
+                        exercise = exercise
+                    )
+                )
+            }
+            // Sort by newest error first
+            _mistakeReviewItems.value = list.sortedByDescending { it.lastErrorTimestamp }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            _mistakeReviewItems.value = emptyList()
+        }
+    }
+
+    fun recordMistake(lessonId: String, questionIndex: Int) {
+        val key = "$lessonId:$questionIndex"
+        val raw = prefs.getString("mistake_records_json", null) ?: "[]"
+        val arr = JSONArray(raw)
+        val updated = JSONArray()
+        var found = false
+        val now = System.currentTimeMillis()
+
+        for (i in 0 until arr.length()) {
+            val obj = arr.getJSONObject(i)
+            if (obj.getString("lessonId") == lessonId && obj.getInt("questionIndex") == questionIndex) {
+                val count = obj.getInt("errorCount") + 1
+                obj.put("errorCount", count)
+                obj.put("lastErrorTimestamp", now)
+                updated.put(obj)
+                found = true
+            } else {
+                updated.put(obj)
+            }
+        }
+        if (!found) {
+            val newObj = JSONObject().apply {
+                put("lessonId", lessonId)
+                put("questionIndex", questionIndex)
+                put("errorCount", 1)
+                put("lastErrorTimestamp", now)
+            }
+            updated.put(newObj)
+        }
+        prefs.edit().putString("mistake_records_json", updated.toString()).apply()
+        loadMistakes()
+    }
+
+    fun recordReviewCorrect(lessonId: String, questionIndex: Int) {
+        val raw = prefs.getString("mistake_records_json", null) ?: "[]"
+        val arr = JSONArray(raw)
+        val updated = JSONArray()
+
+        for (i in 0 until arr.length()) {
+            val obj = arr.getJSONObject(i)
+            if (obj.getString("lessonId") == lessonId && obj.getInt("questionIndex") == questionIndex) {
+                val count = obj.getInt("errorCount") - 1
+                if (count > 0) {
+                    obj.put("errorCount", count)
+                    updated.put(obj)
+                }
+                // If count <= 0, omit it from list (removed from review list)
+            } else {
+                updated.put(obj)
+            }
+        }
+        prefs.edit().putString("mistake_records_json", updated.toString()).apply()
+        loadMistakes()
+    }
+
+    fun clearMistakes() {
+        prefs.edit().remove("mistake_records_json").apply()
+        _mistakeReviewItems.value = emptyList()
+    }
+
+    // ==========================================
+    // Exam History Records (سجل نتائج الامتحانات)
+    // ==========================================
+    private val _examHistory = MutableStateFlow<List<com.example.model.ExamHistoryRecord>>(emptyList())
+    val examHistory: StateFlow<List<com.example.model.ExamHistoryRecord>> = _examHistory.asStateFlow()
+
+    fun loadExamHistory() {
+        val raw = prefs.getString("exam_history_json", null) ?: "[]"
+        try {
+            val arr = JSONArray(raw)
+            val list = mutableListOf<com.example.model.ExamHistoryRecord>()
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                list.add(
+                    com.example.model.ExamHistoryRecord(
+                        examId = obj.getString("examId"),
+                        examTitle = obj.getString("examTitle"),
+                        timestamp = obj.getLong("timestamp"),
+                        declaredTotal = obj.getInt("declaredTotal")
+                    )
+                )
+            }
+            _examHistory.value = list.sortedByDescending { it.timestamp }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            _examHistory.value = emptyList()
+        }
+    }
+
+    fun recordExamSubmission(examId: String, examTitle: String, declaredTotal: Int) {
+        val raw = prefs.getString("exam_history_json", null) ?: "[]"
+        val arr = JSONArray(raw)
+        val obj = JSONObject().apply {
+            put("examId", examId)
+            put("examTitle", examTitle)
+            put("timestamp", System.currentTimeMillis())
+            put("declaredTotal", declaredTotal)
+        }
+        arr.put(obj)
+        prefs.edit().putString("exam_history_json", arr.toString()).apply()
+        loadExamHistory()
+    }
+
+    fun clearExamHistory() {
+        prefs.edit().remove("exam_history_json").apply()
+        _examHistory.value = emptyList()
     }
 
     fun loadLessons() {

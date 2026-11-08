@@ -1,53 +1,214 @@
 package com.example
 
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
 class ExampleUnitTest {
-    @Test
-    fun testLessonsJsonVersion9Structure() {
-        val jsonFile = File("src/main/assets/lessons.json")
-        val file = if (jsonFile.exists()) jsonFile else File("app/src/main/assets/lessons.json")
-        assertTrue("lessons.json must exist", file.exists())
-        val content = file.readText()
 
-        assertFalse("JSON must not contain shart_lesson", content.contains("shart_lesson"))
-
-        // Extract lessons block
-        val lessonsBlock = content.substringAfter("\"lessons\":").substringBeforeLast("]")
-
-        // Each lesson has an "order" integer
-        val orderMatches = Regex("\"order\"\\s*:\\s*(\\d+)").findAll(lessonsBlock).toList()
-        assertEquals("Total lessons must be exactly 21", 21, orderMatches.size)
-
-        // Find all unit fields in lessons block
-        val unitMatches = Regex("\"unit\"\\s*:\\s*(\\d+)").findAll(lessonsBlock).map { it.groupValues[1].toInt() }.toList()
-        assertEquals("Total lessons unit count must be 21", 21, unitMatches.size)
-
-        val unitCounts = unitMatches.groupingBy { it }.eachCount()
-        assertEquals("Unit 1 must have 7 lessons", 7, unitCounts[1] ?: 0)
-        assertEquals("Unit 2 must have 7 lessons", 7, unitCounts[2] ?: 0)
-        assertEquals("Unit 3 must have 7 lessons", 7, unitCounts[3] ?: 0)
-        assertFalse("Unit 0 must not exist", unitCounts.containsKey(0))
-        assertFalse("Unit 5 must not exist", unitCounts.containsKey(5))
-
-        // Check key Unit 2 lessons
-        assertTrue("Contains zaman/makan lesson", content.contains("language-s1-u2-zaman-makan") || content.contains("lang-s1-u2-zaman-makan") || content.contains("أسماء الزمان والمكان"))
-        assertTrue("Contains ism ala lesson", content.contains("language-s1-u2-ism-ala") || content.contains("lang-s1-u2-ism-ala") || content.contains("اسم الآلة"))
-        assertTrue("Contains rihla description writing lesson", content.contains("writing-s1-u2-travel-description") || content.contains("وصف رحلة"))
-
-        // Check key Unit 3 lessons
-        assertTrue("Contains nisba lesson", content.contains("language-s1-u3-nisba") || content.contains("النسبة"))
-        assertTrue("Contains maajim lesson", content.contains("language-s1-u3-maajim") || content.contains("المعاجم"))
-        assertTrue("Contains comment/critique writing lesson", content.contains("writing-s1-u3-comment-critique") || content.contains("التعقيب والتعليق"))
+    private fun getAssetFile(filename: String): File {
+        val candidates = listOf(
+            File("src/main/assets/$filename"),
+            File("app/src/main/assets/$filename"),
+            File("../app/src/main/assets/$filename")
+        )
+        val file = candidates.firstOrNull { it.exists() }
+        assertNotNull("ملف الأصول $filename غير موجود في المسارات المفحوصة", file)
+        return file!!
     }
 
+    /**
+     * 1) تحميل lessons.json وتحليله مع التحقق من الحقول الإلزامية لكل درس:
+     * id و component و semester و unit و order و title، وعدم تكرار id.
+     */
     @Test
-    fun testAllFiveExamFiles() {
-        val examFiles = listOf(
+    fun testLessonsJsonIntegrityAndRequiredFields() {
+        val file = getAssetFile("lessons.json")
+        val content = file.readText()
+        val root = JSONObject(content)
+
+        assertTrue("يجب أن يحتوي ملف lessons.json على مصفوفة lessons", root.has("lessons"))
+        val lessonsArr = root.getJSONArray("lessons")
+        val totalLessons = lessonsArr.length()
+        assertEquals("عدد الدروس المقررة في lessons.json يجب أن يكون 21 درساً", 21, totalLessons)
+
+        val seenIds = mutableSetOf<String>()
+        val requiredFields = listOf("id", "component", "semester", "unit", "order", "title")
+
+        for (i in 0 until totalLessons) {
+            val lesson = lessonsArr.getJSONObject(i)
+
+            // التحقق من الحقول الإلزامية
+            for (field in requiredFields) {
+                assertTrue("الدرس في الفهرس $i ينقصه الحقل الإلزامي '$field'", lesson.has(field))
+                val value = lesson.get(field)
+                if (value is String) {
+                    assertTrue("الحقل '$field' في الدرس $i لا يجوز أن يكون فارغاً", value.isNotBlank())
+                }
+            }
+
+            val lessonId = lesson.getString("id")
+            assertFalse("معرّف الدرس مكرر: $lessonId", seenIds.contains(lessonId))
+            seenIds.add(lessonId)
+
+            // التحقق من صحة الوحدة (1 أو 2 أو 3 فقط)
+            val unit = lesson.getInt("unit")
+            assertTrue("الوحدة في الدرس $lessonId يجب أن تكون بين 1 و 3", unit in 1..3)
+
+            // التحقق من صحة المكوّن
+            val comp = lesson.getString("component")
+            assertTrue(
+                "المكوّن '$comp' في الدرس $lessonId غير معروف",
+                comp in listOf("texts", "language", "writing", "exams")
+            )
+        }
+    }
+
+    /**
+     * 2) اختبار كل سؤال mcq في التمارين:
+     * answerIndex بين 0 وعدد الخيارات - 1، وخياراته غير مكررة.
+     */
+    @Test
+    fun testMcqExercisesValidation() {
+        val file = getAssetFile("lessons.json")
+        val root = JSONObject(file.readText())
+        val lessonsArr = root.getJSONArray("lessons")
+
+        var mcqCount = 0
+        for (i in 0 until lessonsArr.length()) {
+            val lesson = lessonsArr.getJSONObject(i)
+            val lessonId = lesson.getString("id")
+            val exercises = lesson.optJSONArray("exercises") ?: JSONArray()
+
+            for (e in 0 until exercises.length()) {
+                val ex = exercises.getJSONObject(e)
+                if (ex.optString("type") == "mcq") {
+                    mcqCount++
+                    assertTrue("سؤال MCQ في الدرس $lessonId ينقصه options", ex.has("options"))
+                    assertTrue("سؤال MCQ في الدرس $lessonId ينقصه answer", ex.has("answer"))
+
+                    val optionsArr = ex.getJSONArray("options")
+                    val optionsList = mutableListOf<String>()
+                    for (o in 0 until optionsArr.length()) {
+                        optionsList.add(optionsArr.getString(o).trim())
+                    }
+
+                    val answerIdx = ex.getInt("answer")
+                    assertTrue(
+                        "في الدرس $lessonId السؤال #${e + 1}: answer ($answerIdx) خارج المجال (0..${optionsList.size - 1})",
+                        answerIdx in 0 until optionsList.size
+                    )
+
+                    val uniqueOptions = optionsList.toSet()
+                    assertEquals(
+                        "في الدرس $lessonId السؤال #${e + 1}: خيارات MCQ مكررة: $optionsList",
+                        optionsList.size,
+                        uniqueOptions.size
+                    )
+                }
+            }
+        }
+        assertTrue("يجب التحقق من وجود أسئلة MCQ في الدروس", mcqCount > 0)
+    }
+
+    /**
+     * 3) اختبار كل سؤال order_words:
+     * answer تحتوي الكلمات نفسها الموجودة في words، وأن answer ليس مطابقاً لـ words.
+     */
+    @Test
+    fun testOrderWordsExercisesValidation() {
+        val file = getAssetFile("lessons.json")
+        val root = JSONObject(file.readText())
+        val lessonsArr = root.getJSONArray("lessons")
+
+        var orderCount = 0
+        for (i in 0 until lessonsArr.length()) {
+            val lesson = lessonsArr.getJSONObject(i)
+            val lessonId = lesson.getString("id")
+            val exercises = lesson.optJSONArray("exercises") ?: JSONArray()
+
+            for (e in 0 until exercises.length()) {
+                val ex = exercises.getJSONObject(e)
+                if (ex.optString("type") == "order_words") {
+                    orderCount++
+                    assertTrue("سؤال order_words في الدرس $lessonId ينقصه words", ex.has("words"))
+                    assertTrue("سؤال order_words في الدرس $lessonId ينقصه answer", ex.has("answer"))
+
+                    val wordsArr = ex.getJSONArray("words")
+                    val answerArr = ex.getJSONArray("answer")
+
+                    val wordsList = (0 until wordsArr.length()).map { wordsArr.getString(it).trim() }
+                    val answerList = (0 until answerArr.length()).map { answerArr.getString(it).trim() }
+
+                    assertEquals(
+                        "في الدرس $lessonId تمرين order_words #${e + 1}: طول words لا يطابق answer",
+                        wordsList.size,
+                        answerList.size
+                    )
+
+                    assertEquals(
+                        "في الدرس $lessonId تمرين order_words #${e + 1}: الكلمات في answer لا تطابق words",
+                        wordsList.sorted(),
+                        answerList.sorted()
+                    )
+
+                    assertFalse(
+                        "في الدرس $lessonId تمرين order_words #${e + 1}: مصفوفة words مطابقة للإجابة مسبقاً وغير مبعثرة",
+                        wordsList == answerList
+                    )
+                }
+            }
+        }
+        assertTrue("يجب التحقق من وجود تمارين order_words", orderCount > 0)
+    }
+
+    /**
+     * 4) اختبار كل سؤال true_false:
+     * له answer منطقي (boolean).
+     */
+    @Test
+    fun testTrueFalseExercisesValidation() {
+        val file = getAssetFile("lessons.json")
+        val root = JSONObject(file.readText())
+        val lessonsArr = root.getJSONArray("lessons")
+
+        var tfCount = 0
+        for (i in 0 until lessonsArr.length()) {
+            val lesson = lessonsArr.getJSONObject(i)
+            val lessonId = lesson.getString("id")
+            val exercises = lesson.optJSONArray("exercises") ?: JSONArray()
+
+            for (e in 0 until exercises.length()) {
+                val ex = exercises.getJSONObject(e)
+                if (ex.optString("type") == "true_false") {
+                    tfCount++
+                    assertTrue("سؤال true_false في الدرس $lessonId ينقصه حقل answer", ex.has("answer"))
+                    val rawAns = ex.get("answer")
+                    assertTrue(
+                        "في الدرس $lessonId سؤال true_false #${e + 1}: الإجابة يجب أن تكون منطقية (true/false) وليست $rawAns",
+                        rawAns is Boolean
+                    )
+                }
+            }
+        }
+        assertTrue("يجب التحقق من وجود أسئلة true_false", tfCount > 0)
+    }
+
+    /**
+     * 5) التحقق من كل ملفات الامتحانات (exam-s1-*.json و local-exams-models.json):
+     * - مجموع نقط الأقسام يساوي declared_total.
+     * - مجموع أسئلة كل قسم يساوي نقطته.
+     * - مجموع معايير rubric في القسم C يساوي نقط القسم C.
+     * - لا يحمل أي امتحان id مكرراً.
+     */
+    @Test
+    fun testAllExamsTotalPointsAndRubricsValidation() {
+        val individualExamFiles = listOf(
             "exam-s1-unit1-assessment.json",
             "exam-s1-unit2-assessment.json",
             "exam-s1-unit3-assessment.json",
@@ -55,51 +216,79 @@ class ExampleUnitTest {
             "exam-s1-homework-1.json"
         )
 
-        for (filename in examFiles) {
-            val jsonFile = File("src/main/assets/$filename")
-            val file = if (jsonFile.exists()) jsonFile else File("app/src/main/assets/$filename")
-            assertTrue("Exam file $filename must exist", file.exists())
-            val content = file.readText()
-
-            val declaredTotalMatch = Regex("\"declared_total\"\\s*:\\s*(\\d+)").find(content)
-            assertTrue("Must contain declared_total in $filename", declaredTotalMatch != null)
-            assertEquals("Declared total must be 20 for $filename", 20, declaredTotalMatch!!.groupValues[1].toInt())
-
-            assertTrue("Must contain passage in $filename", content.contains("\"passage\""))
-            assertTrue("Must contain sections in $filename", content.contains("\"sections\""))
-            assertTrue("Must contain answer_groups or rubric in $filename", content.contains("answer_groups") || content.contains("rubric"))
-        }
-    }
-
-    @Test
-    fun testLocalExamsModelsJsonStructure() {
-        val jsonFile = File("src/main/assets/local-exams-models.json")
-        val file = if (jsonFile.exists()) jsonFile else File("app/src/main/assets/local-exams-models.json")
-        assertTrue("local-exams-models.json must exist", file.exists())
-        val content = file.readText()
-
-        val localExamIds = listOf(
-            "local-exam-2018-2019-tolerance",
-            "local-exam-tanseefet-2020-islam",
-            "local-exam-tazart-2025-body-health",
-            "local-exam-yousfia-2022-human",
-            "local-exam-tanseefet-2025-hollywood",
-            "local-exam-ibn-battuta-2022-2023"
-        )
-        for (examId in localExamIds) {
-            assertTrue("local-exams-models.json must contain $examId", content.contains(examId))
+        val allExamsList = mutableListOf<JSONObject>()
+        for (filename in individualExamFiles) {
+            val file = getAssetFile(filename)
+            allExamsList.add(JSONObject(file.readText()))
         }
 
-        val declaredTotals = Regex("\"declared_total\"\\s*:\\s*(\\d+)").findAll(content).map { it.groupValues[1].toInt() }.toList()
-        assertEquals("Must have 6 declared_total entries", 6, declaredTotals.size)
-        assertTrue("All declared_total must be 20", declaredTotals.all { it == 20 })
+        // امتحانات الملف المجمع
+        val localFile = getAssetFile("local-exams-models.json")
+        val localRoot = JSONObject(localFile.readText())
+        val localExamsArr = localRoot.getJSONArray("exams")
+        for (i in 0 until localExamsArr.length()) {
+            allExamsList.add(localExamsArr.getJSONObject(i))
+        }
 
-        val sourceCount = Regex("\"source\"\\s*:\\s*\"").findAll(content).count()
-        assertEquals("All 6 exams must have a source", 6, sourceCount)
+        assertEquals("إجمالي عدد الامتحانات يجب أن يكون 11 امتحاناً", 11, allExamsList.size)
 
-        assertTrue("Must contain section A", content.contains("\"id\": \"A\""))
-        assertTrue("Must contain section B", content.contains("\"id\": \"B\""))
-        assertTrue("Must contain section C", content.contains("\"id\": \"C\""))
-        assertTrue("Must contain note_for_teacher", content.contains("note_for_teacher"))
+        val seenExamIds = mutableSetOf<String>()
+        for (exam in allExamsList) {
+            val examId = exam.getString("id")
+            assertFalse("معرّف الامتحان مكرر: $examId", seenExamIds.contains(examId))
+            seenExamIds.add(examId)
+
+            val declaredTotal = exam.getInt("declared_total")
+            assertEquals("declared_total يجب أن يساوي 20 في $examId", 20, declaredTotal)
+
+            val sectionsArr = exam.getJSONArray("sections")
+            var sectionsSum = 0.0
+
+            for (s in 0 until sectionsArr.length()) {
+                val section = sectionsArr.getJSONObject(s)
+                val sectionId = section.getString("id")
+                val sectionPoints = section.getDouble("points")
+                sectionsSum += sectionPoints
+
+                // التحقق من مجموع أسئلة القسم
+                val questionsArr = section.optJSONArray("questions")
+                if (questionsArr != null && questionsArr.length() > 0) {
+                    var qSum = 0.0
+                    for (q in 0 until questionsArr.length()) {
+                        qSum += questionsArr.getJSONObject(q).getDouble("points")
+                    }
+                    assertEquals(
+                        "في الامتحان $examId القسم $sectionId: مجموع نقط الأسئلة ($qSum) يجب أن يساوي نقط القسم ($sectionPoints)",
+                        sectionPoints,
+                        qSum,
+                        0.001
+                    )
+                }
+
+                // التحقق من معايير rubric في القسم C
+                if (sectionId == "C") {
+                    val rubricArr = section.optJSONArray("rubric")
+                    if (rubricArr != null && rubricArr.length() > 0) {
+                        var rubricSum = 0.0
+                        for (r in 0 until rubricArr.length()) {
+                            rubricSum += rubricArr.getJSONObject(r).getDouble("points")
+                        }
+                        assertEquals(
+                            "في الامتحان $examId القسم C: مجموع معايير rubric ($rubricSum) يجب أن يساوي نقط القسم ($sectionPoints)",
+                            sectionPoints,
+                            rubricSum,
+                            0.001
+                        )
+                    }
+                }
+            }
+
+            assertEquals(
+                "في الامتحان $examId: مجموع نقط الأقسام ($sectionsSum) يجب أن يساوي declared_total ($declaredTotal)",
+                declaredTotal.toDouble(),
+                sectionsSum,
+                0.001
+            )
+        }
     }
 }

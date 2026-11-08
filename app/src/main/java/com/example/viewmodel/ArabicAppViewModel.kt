@@ -293,7 +293,32 @@ class ArabicAppViewModel(application: Application) : AndroidViewModel(applicatio
         examValidationError = null
         submittedExams[examId] = true
         showCorrectionExams[examId] = true
+
+        val examObj = repository.getExamById(examId)
+        val title = examObj?.title ?: examId
+        val total = examObj?.declaredTotal ?: 20
+        repository.recordExamSubmission(examId, title, total)
         return true
+    }
+
+    // Spaced review bindings
+    val mistakeReviewItems = repository.mistakeReviewItems
+    val examHistory = repository.examHistory
+
+    fun recordMistake(lessonId: String, questionIndex: Int) {
+        repository.recordMistake(lessonId, questionIndex)
+    }
+
+    fun recordReviewCorrect(lessonId: String, questionIndex: Int) {
+        repository.recordReviewCorrect(lessonId, questionIndex)
+    }
+
+    fun clearMistakes() {
+        repository.clearMistakes()
+    }
+
+    fun clearExamHistory() {
+        repository.clearExamHistory()
     }
 
     fun toggleCorrectionModel() {

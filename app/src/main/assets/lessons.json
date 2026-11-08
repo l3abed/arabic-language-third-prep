@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "العربية — الثالثة إعدادي",
-    "version": 9,
+    "version": 11,
     "schema": {
       "الدرس": "id, component, semester, unit, order, tag (اختياري), title, summary, cards[], exercises[]",
       "البطاقات (cards)": {

@@ -280,7 +280,12 @@ fun ExerciseScreen(
                                             isAnswerSubmitted = true
                                             val correct = optIndex == exercise.answerIndex
                                             isAnswerCorrect = correct
-                                            if (correct) score++
+                                            if (correct) {
+                                                score++
+                                                viewModel.recordReviewCorrect(lesson.id, questionIndex)
+                                            } else {
+                                                viewModel.recordMistake(lesson.id, questionIndex)
+                                            }
                                         },
                                     shape = RoundedCornerShape(14.dp),
                                     colors = CardDefaults.cardColors(
@@ -347,7 +352,12 @@ fun ExerciseScreen(
                                             isAnswerSubmitted = true
                                             val correct = boolValue == exercise.answer
                                             isAnswerCorrect = correct
-                                            if (correct) score++
+                                            if (correct) {
+                                                score++
+                                                viewModel.recordReviewCorrect(lesson.id, questionIndex)
+                                            } else {
+                                                viewModel.recordMistake(lesson.id, questionIndex)
+                                            }
                                         },
                                     shape = RoundedCornerShape(14.dp),
                                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -516,7 +526,12 @@ fun ExerciseScreen(
                                         isAnswerSubmitted = true
                                         val correct = orderedWords.toList() == exercise.answer
                                         isAnswerCorrect = correct
-                                        if (correct) score++
+                                        if (correct) {
+                                            score++
+                                            viewModel.recordReviewCorrect(lesson.id, questionIndex)
+                                        } else {
+                                            viewModel.recordMistake(lesson.id, questionIndex)
+                                        }
                                     },
                                     modifier = Modifier
                                         .fillMaxWidth()
