@@ -173,8 +173,16 @@ sealed class ExerciseItem {
     data class OrderWords(
         val words: List<String>,
         val answer: List<String>,
-        override val explanation: String
+        override val explanation: String,
+        // Other grammatically valid orders (e.g. verbal vs. nominal sentence).
+        val alternatives: List<List<String>> = emptyList()
     ) : ExerciseItem() {
+        fun isCorrect(order: List<String>): Boolean =
+            order == answer || alternatives.any { it == order }
+
+        val allValidSentences: List<String>
+            get() = (listOf(answer) + alternatives).map { it.joinToString(" ") }
+
         override val type: String = "order_words"
         override val prompt: String = "رتّب الكلمات لتكوين جملة سليمة:"
     }
