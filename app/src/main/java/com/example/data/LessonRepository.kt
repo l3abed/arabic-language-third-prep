@@ -41,15 +41,6 @@ class LessonRepository(private val context: Context) {
     private val _settings = MutableStateFlow(UserSettings())
     val settings: StateFlow<UserSettings> = _settings.asStateFlow()
 
-    init {
-        cleanDeprecatedData()
-        loadSettings()
-        loadCompletedLessons()
-        loadLessons()
-        loadMistakes()
-        loadExamHistory()
-    }
-
     private fun cleanDeprecatedData() {
         val editor = prefs.edit()
 
@@ -878,5 +869,28 @@ class LessonRepository(private val context: Context) {
             }
         }
         return map
+    }
+
+    // IMPORTANT: this init block must stay at the END of the class body.
+    // Kotlin initializes properties and init blocks in textual order, and
+    // loadMistakes()/loadExamHistory() use properties declared above this point.
+    init {
+        try {
+            loadAllData()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            // Corrupted/incompatible old SharedPreferences: reset and retry once.
+            try { prefs.edit().clear().commit() } catch (_: Exception) {}
+            try { loadAllData() } catch (e2: Exception) { e2.printStackTrace() }
+        }
+    }
+
+    private fun loadAllData() {
+        cleanDeprecatedData()
+        loadSettings()
+        loadCompletedLessons()
+        loadLessons()
+        loadMistakes()
+        loadExamHistory()
     }
 }
