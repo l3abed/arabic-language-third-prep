@@ -235,7 +235,7 @@ fun ExerciseScreen(
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium,
                             modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.End
+                            textAlign = TextAlign.Start
                         )
 
                         Spacer(modifier = Modifier.height(12.dp))
@@ -317,7 +317,7 @@ fun ExerciseScreen(
                                             fontSize = (20 * settings.fontScale).sp,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onSurface,
-                                            textAlign = TextAlign.End,
+                                            textAlign = TextAlign.Start,
                                             modifier = Modifier.weight(1f)
                                         )
                                     }
@@ -387,7 +387,7 @@ fun ExerciseScreen(
                                             fontSize = (22 * settings.fontScale).sp,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onSurface,
-                                            textAlign = TextAlign.End
+                                            textAlign = TextAlign.Start
                                         )
                                     }
                                 }
@@ -524,7 +524,7 @@ fun ExerciseScreen(
                                 Button(
                                     onClick = {
                                         isAnswerSubmitted = true
-                                        val correct = orderedWords.toList() == exercise.answer
+                                        val correct = exercise.isCorrect(orderedWords.toList())
                                         isAnswerCorrect = correct
                                         if (correct) {
                                             score++
@@ -569,6 +569,21 @@ fun ExerciseScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Spacer(modifier = Modifier.height(6.dp))
+                            (exercise as? ExerciseItem.OrderWords)?.let { ow ->
+                                Text(
+                                    text = (if (ow.allValidSentences.size > 1) "الجمل الصحيحة:\n" else "الجملة الصحيحة:\n") +
+                                        TextHelper.formatArabic(
+                                            ow.allValidSentences.joinToString("\n"),
+                                            settings.showTashkeel
+                                        ),
+                                    color = Color.White,
+                                    fontFamily = AmiriFontFamily,
+                                    fontSize = 17.sp,
+                                    lineHeight = 26.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                            }
                             Text(
                                 text = TextHelper.formatArabic(exercise.explanation, settings.showTashkeel),
                                 color = Color.White,
