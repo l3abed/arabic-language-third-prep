@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -87,7 +88,7 @@ fun AppBottomNav(
 }
 
 @Composable
-private fun NavItem(
+private fun RowScope.NavItem(
     title: String,
     icon: ImageVector,
     isSelected: Boolean,
@@ -99,9 +100,9 @@ private fun NavItem(
 
     Column(
         modifier = Modifier
+            .weight(1f)
             .testTag(testTag)
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp)
             .height(68.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
@@ -110,14 +111,14 @@ private fun NavItem(
         if (isSelected) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .fillMaxWidth(0.6f)
                     .height(3.dp)
                     .background(GoldAccent)
             )
         } else {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .fillMaxWidth(0.6f)
                     .height(3.dp)
                     .background(Color.Transparent)
             )
