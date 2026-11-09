@@ -35,7 +35,7 @@ class ExampleUnitTest {
         assertTrue("يجب أن يحتوي ملف lessons.json على مصفوفة lessons", root.has("lessons"))
         val lessonsArr = root.getJSONArray("lessons")
         val totalLessons = lessonsArr.length()
-        assertEquals("عدد الدروس المقررة في lessons.json يجب أن يكون 21 درساً", 21, totalLessons)
+        assertTrue("يجب أن يحتوي ملف lessons.json على الدروس المقررة", totalLessons >= 21)
 
         val seenIds = mutableSetOf<String>()
         val requiredFields = listOf("id", "component", "semester", "unit", "order", "title")
@@ -56,9 +56,9 @@ class ExampleUnitTest {
             assertFalse("معرّف الدرس مكرر: $lessonId", seenIds.contains(lessonId))
             seenIds.add(lessonId)
 
-            // التحقق من صحة الوحدة (1 أو 2 أو 3 فقط)
+            // التحقق من صحة الوحدة (من 1 إلى 6 للدورة الأولى والثانية)
             val unit = lesson.getInt("unit")
-            assertTrue("الوحدة في الدرس $lessonId يجب أن تكون بين 1 و 3", unit in 1..3)
+            assertTrue("الوحدة في الدرس $lessonId يجب أن تكون بين 1 و 6", unit in 1..6)
 
             // التحقق من صحة المكوّن
             val comp = lesson.getString("component")
@@ -213,7 +213,11 @@ class ExampleUnitTest {
             "exam-s1-unit2-assessment.json",
             "exam-s1-unit3-assessment.json",
             "exam-s1-general-assessment.json",
-            "exam-s1-homework-1.json"
+            "exam-s1-homework-1.json",
+            "exam-s2-unit4-assessment.json",
+            "exam-s2-unit5-assessment.json",
+            "exam-s2-unit6-assessment.json",
+            "exam-s2-general-assessment.json"
         )
 
         val allExamsList = mutableListOf<JSONObject>()
@@ -230,7 +234,7 @@ class ExampleUnitTest {
             allExamsList.add(localExamsArr.getJSONObject(i))
         }
 
-        assertEquals("إجمالي عدد الامتحانات يجب أن يكون 11 امتحاناً", 11, allExamsList.size)
+        assertEquals("إجمالي عدد الامتحانات يجب أن يكون 15 امتحاناً", 15, allExamsList.size)
 
         val seenExamIds = mutableSetOf<String>()
         for (exam in allExamsList) {
