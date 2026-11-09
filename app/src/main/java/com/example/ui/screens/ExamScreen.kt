@@ -431,7 +431,7 @@ fun ExamScreen(viewModel: ArabicAppViewModel) {
                                 4 -> "الوحدة الرابعة: المجال الاجتماعي والاقتصادي"
                                 5 -> "الوحدة الخامسة: المجال السكاني"
                                 6 -> "الوحدة السادسة: المجال الفني والثقافي"
-                                else -> "الأسدس الأول: شامل"
+                                else -> if (currentExam.semester == 2) "الأسدس الثاني: شامل" else "الأسدس الأول: شامل"
                             },
                             fontSize = 13.sp,
                             color = TextSecondaryLight

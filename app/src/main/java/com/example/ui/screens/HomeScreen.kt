@@ -464,7 +464,7 @@ fun HomeScreen(
                 item {
                     ExamCategoryCard(
                         title = "تقويمات الوحدات الدراسية",
-                        subtitle = "تقويمات الوحدات من 1 إلى 6، والتقويم الإجمالي للأسدس الأول",
+                        subtitle = "تقويمات الوحدات من 1 إلى 6، والتقويمان الإجماليان للأسدسين",
                         countText = "${viewModel.unitAssessments.size} تقويمات",
                         icon = Icons.Filled.Assignment,
                         onClick = { selectedExamCategory = "assessments" }
