@@ -368,12 +368,15 @@ fun HomeScreen(
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onBackground,
-                        fontSize = 19.sp
+                        fontSize = 19.sp,
+                        modifier = Modifier.weight(1f)
                     )
                     Text(
                         text = "اختر مكوّناً للمتابعة",
                         fontSize = 12.sp,
-                        color = TextSecondaryLight
+                        color = TextSecondaryLight,
+                        softWrap = false,
+                        maxLines = 1
                     )
                 }
             }

@@ -172,24 +172,6 @@ fun ExamScreen(viewModel: ArabicAppViewModel) {
                         )
                     }
 
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (viewModel.isTeacherMode) GoldAccent else Color.White.copy(alpha = 0.18f))
-                            .clickable { viewModel.toggleTeacherMode() }
-                            .padding(horizontal = 8.dp, vertical = 5.dp)
-                            .testTag("teacher_mode_toggle_btn")
-                    ) {
-                        Text(
-                            text = if (viewModel.isTeacherMode) "وضع الأستاذ" else "وضع المتعلّم",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (viewModel.isTeacherMode) PrimaryDarkTeal else Color.White,
-                            softWrap = false,
-                            maxLines = 1
-                        )
-                    }
-
                     Spacer(modifier = Modifier.width(8.dp))
 
                     Column(
@@ -464,81 +446,6 @@ fun ExamScreen(viewModel: ArabicAppViewModel) {
                 }
             }
 
-            // Note to teacher / mismatch alert: strictly shown ONLY when isTeacherMode is true
-            if (viewModel.isTeacherMode) {
-                if (!currentExam.isTotalValid) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = GoldLight.copy(alpha = 0.35f)),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, GoldAccent)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Info,
-                                contentDescription = null,
-                                tint = PrimaryDarkTeal,
-                                modifier = Modifier.size(22.dp)
-                            )
-                            Text(
-                                text = "تنبيه خاص بالأستاذ: مجموع نقط المجالات (${currentExam.totalPoints} ن) لا يطابق المجموع المعلن (${currentExam.declaredTotal} ن).",
-                                color = PrimaryDarkTeal,
-                                fontSize = 13.sp,
-                                lineHeight = 18.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
-                }
-
-                if (currentExam.noteForTeacher.isNotBlank()) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = GoldLight.copy(alpha = 0.35f)),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, GoldAccent)
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Info,
-                                    contentDescription = null,
-                                    tint = PrimaryDarkTeal,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Text(
-                                    text = "ملاحظة توجيهية خاصة بالأستاذ:",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
-                                    color = PrimaryDarkTeal
-                                )
-                            }
-                            Text(
-                                text = currentExam.noteForTeacher,
-                                fontFamily = AmiriFontFamily,
-                                fontSize = 14.sp,
-                                lineHeight = 22.sp,
-                                color = PrimaryDarkTeal
-                            )
-                        }
-                    }
-                }
-            }
-
             // Validation Error Alert Banner
             if (validationError != null) {
                 Card(
@@ -622,7 +529,6 @@ fun ExamScreen(viewModel: ArabicAppViewModel) {
                     section = section,
                     isSubmitted = isSubmitted,
                     showCorrection = showCorrection,
-                    isTeacherMode = viewModel.isTeacherMode,
                     examAnswers = viewModel.examAnswers,
                     selectedTopicId = viewModel.getSelectedExamTopic(currentExam.id, section.id),
                     onSelectTopic = { topicId ->
@@ -800,7 +706,11 @@ private fun PassageCard(
                         textAlign = TextAlign.Justify,
                         modifier = Modifier.fillMaxWidth()
                     )
-                    if (title.isNotBlank()) {
+                    val cleanTitle = title
+                        .removePrefix("نص الانطلاق")
+                        .trimStart(':', ' ', '،', '-', '–')
+                        .trim()
+                    if (cleanTitle.isNotBlank()) {
                         Spacer(modifier = Modifier.height(12.dp))
                         Box(
                             modifier = Modifier
@@ -811,7 +721,7 @@ private fun PassageCard(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "عنوان النص: «$title»",
+                                text = "عنوان النص: «$cleanTitle»",
                                 fontFamily = AmiriFontFamily,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = (16 * fontScale).sp,
@@ -832,7 +742,6 @@ private fun SectionCard(
     section: ExamSection,
     isSubmitted: Boolean,
     showCorrection: Boolean,
-    isTeacherMode: Boolean = false,
     examAnswers: Map<String, String>,
     selectedTopicId: String?,
     onSelectTopic: (String) -> Unit,
@@ -919,7 +828,6 @@ private fun SectionCard(
                     studentWriting = studentWriting,
                     isSubmitted = isSubmitted,
                     showCorrection = showCorrection,
-                    isTeacherMode = isTeacherMode,
                     onWritingChange = { onAnswerChange(writingKey, it) },
                     fontScale = fontScale
                 )
@@ -1195,7 +1103,6 @@ private fun WritingSectionCard(
     studentWriting: String,
     isSubmitted: Boolean,
     showCorrection: Boolean,
-    isTeacherMode: Boolean = false,
     onWritingChange: (String) -> Unit,
     fontScale: Float
 ) {
@@ -1242,7 +1149,11 @@ private fun WritingSectionCard(
         var activeTopic: ExamTopic? = null
         if (section.chooseOne && section.topics.isNotEmpty()) {
             Text(
-                text = "اختر أحد الموضوعين الآتيين للإنجاز:",
+                text = when (section.topics.size) {
+                    2 -> "اختر أحد الموضوعين الآتيين للإنجاز:"
+                    3 -> "اختر أحد المواضيع الثلاثة الآتية للإنجاز:"
+                    else -> "اختر أحد المواضيع الآتية للإنجاز:"
+                },
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 color = PrimaryDarkTeal
@@ -1460,74 +1371,6 @@ private fun WritingSectionCard(
                     }
                 }
 
-                // Model Text or Points for Writing (strictly for teacher only)
-                val modelPointsToShow = activeTopic?.modelPoints?.ifEmpty { null } ?: section.modelPoints.ifEmpty { null }
-                val modelTextToShow = activeTopic?.modelText ?: section.modelText
-
-                if (isTeacherMode && (modelPointsToShow != null || modelTextToShow != null)) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F3EE)),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, SuccessGreen.copy(alpha = 0.5f))
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.CheckCircle,
-                                    contentDescription = null,
-                                    tint = SuccessGreen,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Text(
-                                    text = "عناصر الموضوع الإنشائي النموذجي (خاص بالأستاذ):",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
-                                    color = PrimaryDarkTeal
-                                )
-                            }
-
-                            if (modelTextToShow != null) {
-                                Text(
-                                    text = modelTextToShow,
-                                    fontFamily = AmiriFontFamily,
-                                    fontSize = (16 * fontScale).sp,
-                                    lineHeight = (27 * fontScale).sp,
-                                    color = Color(0xFF133E32),
-                                    textAlign = TextAlign.Justify,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-
-                            if (modelPointsToShow != null) {
-                                Column(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    modelPointsToShow.forEach { pt ->
-                                        Text(
-                                            text = "• $pt",
-                                            fontFamily = AmiriFontFamily,
-                                            fontSize = (15 * fontScale).sp,
-                                            lineHeight = (24 * fontScale).sp,
-                                            color = Color(0xFF133E32),
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
             }
         }
     }

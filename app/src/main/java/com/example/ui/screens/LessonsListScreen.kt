@@ -709,9 +709,20 @@ private fun ExamItemCard(
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.Top
             ) {
+                Text(
+                    text = exam.title,
+                    fontFamily = AmiriFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    lineHeight = 28.sp,
+                    color = PrimaryDarkTeal,
+                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.Start
+                )
+
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
@@ -720,22 +731,14 @@ private fun ExamItemCard(
                         .padding(horizontal = 10.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = "${exam.declaredTotal} / 20 نقطة",
+                        text = "${exam.declaredTotal} / 20",
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp,
-                        color = PrimaryDarkTeal
+                        color = PrimaryDarkTeal,
+                        softWrap = false,
+                        maxLines = 1
                     )
                 }
-
-                Text(
-                    text = exam.title,
-                    fontFamily = AmiriFontFamily,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                    color = PrimaryDarkTeal,
-                    modifier = Modifier.weight(1f, fill = false),
-                    textAlign = TextAlign.Start
-                )
             }
 
             if (exam.source.isNotBlank()) {
@@ -748,9 +751,13 @@ private fun ExamItemCard(
                 )
             }
 
-            if (exam.passage.title.isNotBlank()) {
+            val passageTitle = exam.passage.title
+                .removePrefix("نص الانطلاق")
+                .trimStart(':', ' ', '،', '-', '–')
+                .trim()
+            if (passageTitle.isNotBlank()) {
                 Text(
-                    text = "نص الانطلاق: «${exam.passage.title}»",
+                    text = "نص الانطلاق: «$passageTitle»",
                     fontFamily = AmiriFontFamily,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 15.sp,

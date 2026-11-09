@@ -707,7 +707,6 @@ class LessonRepository(private val context: Context) {
         val subject = root.optString("subject", "")
         val duration = root.optString("duration", "مرنة")
         val declaredTotal = root.optInt("declared_total", 20)
-        val noteForTeacher = root.optString("note_for_teacher", "")
 
         val passageObj = root.optJSONObject("passage") ?: JSONObject()
         val passage = ExamPassage(
@@ -848,7 +847,6 @@ class LessonRepository(private val context: Context) {
             subject = subject,
             duration = duration,
             declaredTotal = declaredTotal,
-            noteForTeacher = noteForTeacher,
             passage = passage,
             sections = sectionsList
         )

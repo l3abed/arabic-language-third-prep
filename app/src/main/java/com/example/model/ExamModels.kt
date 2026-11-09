@@ -12,7 +12,6 @@ data class ExamData(
     val subject: String = "",
     val duration: String = "",
     val declaredTotal: Int = 20,
-    val noteForTeacher: String = "",
     val passage: ExamPassage,
     val sections: List<ExamSection> = emptyList()
 ) {

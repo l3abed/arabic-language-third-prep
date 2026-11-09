@@ -98,7 +98,7 @@ fun ExercisesOverviewScreen(
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "فروض شاملة وامتحانات تقويمية لجميع الوحدات (1 و2 و3) وتمارين تفاعلية",
+                text = "فروض شاملة وامتحانات تقويمية لجميع الوحدات (من 1 إلى 6) وتمارين تفاعلية",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextSecondaryLight,
                 fontSize = 14.sp
@@ -118,11 +118,12 @@ fun ExercisesOverviewScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "نماذج الامتحانات والفروض (${allExams.size} نماذج)",
+                        text = "نماذج الامتحانات والفروض (${allExams.size} نموذجاً)",
                         fontFamily = AmiriFontFamily,
                         fontWeight = FontWeight.Bold,
                         fontSize = 19.sp,
-                        color = PrimaryDarkTeal
+                        color = PrimaryDarkTeal,
+                        modifier = Modifier.weight(1f)
                     )
                     TextButton(
                         onClick = {
@@ -135,7 +136,9 @@ fun ExercisesOverviewScreen(
                             text = "عرض الكل",
                             color = GoldAccent,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
+                            fontSize = 13.sp,
+                            softWrap = false,
+                            maxLines = 1
                         )
                     }
                 }
@@ -206,9 +209,20 @@ fun ExercisesOverviewScreen(
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.Top
                     ) {
+                        Text(
+                            text = exam.title,
+                            fontFamily = AmiriFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            lineHeight = 28.sp,
+                            color = PrimaryDarkTeal,
+                            modifier = Modifier.weight(1f),
+                            textAlign = TextAlign.Start
+                        )
+
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
@@ -217,22 +231,14 @@ fun ExercisesOverviewScreen(
                                 .padding(horizontal = 8.dp, vertical = 3.dp)
                         ) {
                             Text(
-                                text = "${exam.declaredTotal} / 20 نقطة",
+                                text = "${exam.declaredTotal} / 20",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp,
-                                color = PrimaryDarkTeal
+                                color = PrimaryDarkTeal,
+                                softWrap = false,
+                                maxLines = 1
                             )
                         }
-
-                        Text(
-                            text = exam.title,
-                            fontFamily = AmiriFontFamily,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp,
-                            color = PrimaryDarkTeal,
-                            modifier = Modifier.weight(1f, fill = false),
-                            textAlign = TextAlign.Start
-                        )
                     }
 
                     if (exam.source.isNotBlank()) {
@@ -244,9 +250,13 @@ fun ExercisesOverviewScreen(
                         )
                     }
 
-                    if (exam.passage.title.isNotBlank()) {
+                    val passageTitle = exam.passage.title
+                        .removePrefix("نص الانطلاق")
+                        .trimStart(':', ' ', '،', '-', '–')
+                        .trim()
+                    if (passageTitle.isNotBlank()) {
                         Text(
-                            text = "نص الانطلاق: «${exam.passage.title}»",
+                            text = "نص الانطلاق: «$passageTitle»",
                             fontFamily = AmiriFontFamily,
                             fontSize = 14.sp,
                             color = MaterialTheme.colorScheme.onSurface
@@ -266,7 +276,11 @@ fun ExercisesOverviewScreen(
                                 4 -> "الوحدة الرابعة: المجال الاجتماعي والاقتصادي"
                                 5 -> "الوحدة الخامسة: المجال السكاني"
                                 6 -> "الوحدة السادسة: المجال الفني والثقافي"
-                                else -> if (exam.semester == 2) "الأسدس الثاني: تقويم إجمالي شامل" else "الأسدس الأول: تقويم إجمالي شامل"
+                                else -> when {
+                                    exam.type == "local_model" -> "امتحان محلي موحد"
+                                    exam.semester == 2 -> "الأسدس الثاني: تقويم إجمالي شامل"
+                                    else -> "الأسدس الأول: تقويم إجمالي شامل"
+                                }
                             },
                             fontSize = 12.sp,
                             color = TextSecondaryLight
@@ -317,7 +331,7 @@ fun ExercisesOverviewScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "تمارين الدروس التفاعلية (21 درساً)",
+                    text = "تمارين الدروس التفاعلية (${lessons.size} درساً)",
                     fontFamily = AmiriFontFamily,
                     fontWeight = FontWeight.Bold,
                     fontSize = 19.sp,

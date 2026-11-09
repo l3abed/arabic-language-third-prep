@@ -62,12 +62,6 @@ class ArabicAppViewModel(application: Application) : AndroidViewModel(applicatio
         get() = standardExams.filter { it.id.contains("homework") || it.title.contains("الفرض") }
     val homeworkExam: com.example.model.ExamData? get() = repository.getExamById(_selectedExamId.value) ?: repository.getHomeworkExam()
 
-    var isTeacherMode by androidx.compose.runtime.mutableStateOf(false)
-
-    fun toggleTeacherMode() {
-        isTeacherMode = !isTeacherMode
-    }
-
     private val _selectedExamId = MutableStateFlow("exam-s1-homework-1")
     val selectedExamId: StateFlow<String> = _selectedExamId.asStateFlow()
 

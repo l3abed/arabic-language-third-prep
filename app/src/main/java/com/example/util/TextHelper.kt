@@ -22,14 +22,8 @@ class ArabicAudioPlayer(private val context: Context) : TextToSpeech.OnInitListe
     private var tts: TextToSpeech? = null
     private var isInitialized = false
 
-    private fun ensureTtsInitialized() {
-        if (tts == null) {
-            try {
-                tts = TextToSpeech(context.applicationContext, this)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
+    init {
+        tts = TextToSpeech(context.applicationContext, this)
     }
 
     override fun onInit(status: Int) {
@@ -42,24 +36,16 @@ class ArabicAudioPlayer(private val context: Context) : TextToSpeech.OnInitListe
 
     fun speak(text: String, speechRate: Float = 0.9f) {
         val cleanText = TextHelper.formatArabic(text, showTashkeel = true)
-        ensureTtsInitialized()
         if (isInitialized && tts != null) {
-            try {
-                tts?.setSpeechRate(speechRate)
-                tts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, "ArabicLessonUtterance")
-            } catch (e: Exception) {
-                e.printStackTrace()
-                Toast.makeText(context, "الصوت: $cleanText", Toast.LENGTH_SHORT).show()
-            }
+            tts?.setSpeechRate(speechRate)
+            tts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, "ArabicLessonUtterance")
         } else {
             Toast.makeText(context, "الصوت: $cleanText", Toast.LENGTH_SHORT).show()
         }
     }
 
     fun stop() {
-        try {
-            tts?.stop()
-        } catch (_: Exception) {}
+        tts?.stop()
     }
 
     fun shutdown() {
