@@ -800,7 +800,19 @@ class LessonRepository(private val context: Context) {
                             }
                         }
                     }
-                    questionsList.add(ExamQuestion(no, points, prompt, grading, answerGroupsList))
+                    val tableObj = qObj.optJSONObject("table")
+                    val examTable = tableObj?.let { t ->
+                        fun rowsOf(key: String): List<List<String>> {
+                            val arr = t.optJSONArray(key) ?: return emptyList()
+                            return (0 until arr.length()).map { i -> jsonArrayToStringList(arr.optJSONArray(i)) }
+                        }
+                        com.example.model.ExamTable(
+                            headers = jsonArrayToStringList(t.optJSONArray("headers")),
+                            rows = rowsOf("rows"),
+                            answerRows = rowsOf("answer_rows")
+                        )
+                    }
+                    questionsList.add(ExamQuestion(no, points, prompt, grading, answerGroupsList, examTable))
                 }
             }
 

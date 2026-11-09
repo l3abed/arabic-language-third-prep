@@ -54,7 +54,16 @@ data class ExamQuestion(
     val points: Double,
     val prompt: String,
     val grading: String = "",
-    val answerGroups: List<List<AnswerItem>> = emptyList()
+    val answerGroups: List<List<AnswerItem>> = emptyList(),
+    val table: ExamTable? = null
+)
+
+// A question whose answer is given in a table. Blank cells ("") in [rows] are filled by the student;
+// [answerRows] holds the complete model answer.
+data class ExamTable(
+    val headers: List<String>,
+    val rows: List<List<String>>,
+    val answerRows: List<List<String>> = emptyList()
 )
 
 data class AnswerItem(

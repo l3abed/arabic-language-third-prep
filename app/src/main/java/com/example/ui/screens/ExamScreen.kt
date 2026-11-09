@@ -20,7 +20,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -70,6 +76,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.AnswerItem
+import com.example.model.ExamTable
 import com.example.model.ExamData
 import com.example.model.ExamQuestion
 import com.example.model.ExamSection
@@ -917,40 +924,51 @@ private fun QuestionCard(
             modifier = Modifier.fillMaxWidth()
         )
 
-        // Student Answer Field
-        OutlinedTextField(
-            value = studentAnswer,
-            onValueChange = onAnswerChange,
-            enabled = !isSubmitted,
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("exam_answer_${sectionId}_${question.no}"),
-            placeholder = {
-                Text(
-                    text = "اكتب إجابتك هنا...",
+        // Student answer: a fill-in table, or a free-text field
+        if (question.table != null) {
+            ExamTableView(
+                table = question.table,
+                studentAnswer = studentAnswer,
+                onAnswerChange = onAnswerChange,
+                enabled = !isSubmitted,
+                fontScale = fontScale
+            )
+        } else {
+                    OutlinedTextField(
+                value = studentAnswer,
+                onValueChange = onAnswerChange,
+                enabled = !isSubmitted,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("exam_answer_${sectionId}_${question.no}"),
+                placeholder = {
+                    Text(
+                        text = "اكتب إجابتك هنا...",
+                        fontFamily = AmiriFontFamily,
+                        fontSize = 15.sp,
+                        color = TextMutedLight
+                    )
+                },
+                shape = RoundedCornerShape(10.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = PrimaryDarkTeal,
+                    unfocusedBorderColor = if (studentAnswer.isNotBlank()) PrimaryDarkTeal.copy(alpha = 0.5f) else BorderLight,
+                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                    disabledContainerColor = MaterialTheme.colorScheme.surface,
+                    disabledTextColor = MaterialTheme.colorScheme.onSurface
+                ),
+                textStyle = androidx.compose.ui.text.TextStyle(
+                    textDirection = androidx.compose.ui.text.style.TextDirection.Rtl,
                     fontFamily = AmiriFontFamily,
-                    fontSize = 15.sp,
-                    color = TextMutedLight
-                )
-            },
-            shape = RoundedCornerShape(10.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = PrimaryDarkTeal,
-                unfocusedBorderColor = if (studentAnswer.isNotBlank()) PrimaryDarkTeal.copy(alpha = 0.5f) else BorderLight,
-                focusedContainerColor = MaterialTheme.colorScheme.surface,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                disabledContainerColor = MaterialTheme.colorScheme.surface,
-                disabledTextColor = MaterialTheme.colorScheme.onSurface
-            ),
-            textStyle = androidx.compose.ui.text.TextStyle(
-                textDirection = androidx.compose.ui.text.style.TextDirection.Rtl,
-                fontFamily = AmiriFontFamily,
-                fontSize = (16 * fontScale).sp,
-                textAlign = TextAlign.Start,
-                color = MaterialTheme.colorScheme.onSurface
-            ),
-            minLines = if (question.points >= 2.0) 3 else 1
-        )
+                    fontSize = (16 * fontScale).sp,
+                    textAlign = TextAlign.Start,
+                    color = MaterialTheme.colorScheme.onSurface
+                ),
+                minLines = if (question.points >= 2.0) 3 else 1
+            )
+
+        }
 
         // Model Answer strictly hidden until submission
         AnimatedVisibility(
@@ -960,6 +978,7 @@ private fun QuestionCard(
         ) {
             QuestionCorrectionCard(
                 answerGroups = question.answerGroups,
+                table = question.table,
                 grading = question.grading,
                 fontScale = fontScale
             )
@@ -970,6 +989,7 @@ private fun QuestionCard(
 @Composable
 private fun QuestionCorrectionCard(
     answerGroups: List<List<AnswerItem>>,
+    table: ExamTable?,
     grading: String,
     fontScale: Float
 ) {
@@ -1004,8 +1024,13 @@ private fun QuestionCorrectionCard(
                 )
             }
 
+            // Table questions show the completed table; others show answer cards
+            if (table != null && table.answerRows.isNotEmpty()) {
+                ExamAnswerTable(table = table, fontScale = fontScale)
+            }
+
             // Render each group as a clean card without any English keys, symbols or '='
-            answerGroups.forEach { group ->
+            (if (table != null && table.answerRows.isNotEmpty()) emptyList() else answerGroups).forEach { group ->
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp),
@@ -1373,5 +1398,176 @@ private fun WritingSectionCard(
 
             }
         }
+    }
+}
+
+
+private const val TABLE_CELL_SEPARATOR = "\u001F"
+private val TABLE_GIVEN_CELL_COLOR = Color(0xFFF4F1E8)
+
+@Composable
+private fun RowScope.ExamTableCell(
+    scrollable: Boolean,
+    background: Color,
+    content: @Composable BoxScope.() -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .then(if (scrollable) Modifier.width(130.dp) else Modifier.weight(1f))
+            .fillMaxHeight()
+            .background(background)
+            .border(0.5.dp, BorderLight)
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        contentAlignment = Alignment.CenterStart,
+        content = content
+    )
+}
+
+@Composable
+private fun ExamTableView(
+    table: ExamTable,
+    studentAnswer: String,
+    onAnswerChange: (String) -> Unit,
+    enabled: Boolean,
+    fontScale: Float
+) {
+    val columnCount = table.headers.size.coerceAtLeast(1)
+    val scrollable = columnCount > 3
+    val blankIndex = remember(table) {
+        val map = mutableMapOf<Pair<Int, Int>, Int>()
+        var n = 0
+        table.rows.forEachIndexed { r, row ->
+            for (c in 0 until columnCount) {
+                if (row.getOrElse(c) { "" }.isBlank()) { map[r to c] = n; n++ }
+            }
+        }
+        map
+    }
+    val typed = remember(studentAnswer, blankIndex.size) {
+        val parts = studentAnswer.split(TABLE_CELL_SEPARATOR)
+        List(blankIndex.size) { parts.getOrElse(it) { "" } }
+    }
+
+    val tableContent: @Composable () -> Unit = {
+        Column(
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .border(1.dp, PrimaryDarkTeal.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+        ) {
+            Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+                for (c in 0 until columnCount) {
+                    ExamTableCell(scrollable, PrimaryDarkTeal) {
+                        Text(
+                            text = table.headers.getOrElse(c) { "" },
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            }
+            table.rows.forEachIndexed { r, row ->
+                Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+                    for (c in 0 until columnCount) {
+                        val cell = row.getOrElse(c) { "" }
+                        val idx = blankIndex[r to c]
+                        if (idx == null) {
+                            ExamTableCell(scrollable, TABLE_GIVEN_CELL_COLOR) {
+                                Text(
+                                    text = cell,
+                                    fontFamily = AmiriFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = (15 * fontScale).sp,
+                                    lineHeight = (22 * fontScale).sp,
+                                    color = PrimaryDarkTeal
+                                )
+                            }
+                        } else {
+                            ExamTableCell(scrollable, Color.White) {
+                                val value = typed.getOrElse(idx) { "" }
+                                BasicTextField(
+                                    value = value,
+                                    onValueChange = { v ->
+                                        val list = typed.toMutableList()
+                                        list[idx] = v.replace(TABLE_CELL_SEPARATOR, "")
+                                        onAnswerChange(list.joinToString(TABLE_CELL_SEPARATOR))
+                                    },
+                                    enabled = enabled,
+                                    textStyle = androidx.compose.ui.text.TextStyle(
+                                        textDirection = androidx.compose.ui.text.style.TextDirection.Rtl,
+                                        fontFamily = AmiriFontFamily,
+                                        fontSize = (15 * fontScale).sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    ),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    decorationBox = { inner ->
+                                        Box {
+                                            if (value.isEmpty()) {
+                                                Text(text = "…", color = TextMutedLight, fontSize = 15.sp)
+                                            }
+                                            inner()
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (scrollable) {
+        Box(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) { tableContent() }
+    } else {
+        tableContent()
+    }
+}
+
+@Composable
+private fun ExamAnswerTable(table: ExamTable, fontScale: Float) {
+    val columnCount = table.headers.size.coerceAtLeast(1)
+    val scrollable = columnCount > 3
+    val tableContent: @Composable () -> Unit = {
+        Column(
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .border(1.dp, SuccessGreen.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+        ) {
+            Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+                for (c in 0 until columnCount) {
+                    ExamTableCell(scrollable, PrimaryDarkTeal) {
+                        Text(
+                            text = table.headers.getOrElse(c) { "" },
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            }
+            table.answerRows.forEachIndexed { r, row ->
+                Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+                    for (c in 0 until columnCount) {
+                        val wasGiven = table.rows.getOrNull(r)?.getOrElse(c) { "" }?.isNotBlank() == true
+                        ExamTableCell(scrollable, if (wasGiven) TABLE_GIVEN_CELL_COLOR else Color.White) {
+                            Text(
+                                text = row.getOrElse(c) { "" },
+                                fontFamily = AmiriFontFamily,
+                                fontWeight = if (wasGiven) FontWeight.Bold else FontWeight.Normal,
+                                fontSize = (15 * fontScale).sp,
+                                lineHeight = (22 * fontScale).sp,
+                                color = if (wasGiven) PrimaryDarkTeal else Color(0xFF133E32)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (scrollable) {
+        Box(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) { tableContent() }
+    } else {
+        tableContent()
     }
 }
