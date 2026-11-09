@@ -620,7 +620,8 @@ class LessonRepository(private val context: Context) {
         "exam-s1-homework-1.json",
         "exam-s2-unit4-assessment.json",
         "exam-s2-unit5-assessment.json",
-        "exam-s2-unit6-assessment.json"
+        "exam-s2-unit6-assessment.json",
+        "exam-s2-general-assessment.json"
     )
 
     fun getStandardExams(): List<ExamData> {
