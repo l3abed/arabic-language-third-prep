@@ -36,6 +36,16 @@ class ArabicAppViewModel(application: Application) : AndroidViewModel(applicatio
     val repository = LessonRepository(application)
     val audioPlayer = ArabicAudioPlayer(application)
 
+    companion object {
+        fun factory(application: Application): androidx.lifecycle.ViewModelProvider.Factory =
+            object : androidx.lifecycle.ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+                    return ArabicAppViewModel(application) as T
+                }
+            }
+    }
+
     // Exam data & in-memory answers (strictly not saved in localStorage / SharedPreferences)
     val allExams: List<com.example.model.ExamData> get() = repository.getAllExams()
     val localExams: List<com.example.model.ExamData> get() = repository.getLocalExams()
