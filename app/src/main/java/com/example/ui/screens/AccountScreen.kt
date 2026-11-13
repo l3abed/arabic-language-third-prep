@@ -462,7 +462,11 @@ fun AccountScreen(
                                             .padding(horizontal = 8.dp, vertical = 4.dp)
                                     ) {
                                         Text(
-                                            text = "${record.declaredTotal} نقطة",
+                                            text = if (record.score >= 0.0) {
+                                                "${com.example.util.ExamGrader.formatScore(record.score)} / ${record.declaredTotal}"
+                                            } else {
+                                                "${record.declaredTotal} نقطة"
+                                            },
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = PrimaryDarkTeal

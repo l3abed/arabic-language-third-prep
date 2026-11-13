@@ -6,6 +6,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -80,6 +83,26 @@ fun ArabicStudyApp(
 ) {
     val currentTab by viewModel.currentTab.collectAsState()
     val activeScreen by viewModel.activeScreen.collectAsState()
+    val isDataLoaded by viewModel.isDataLoaded.collectAsState()
+
+    if (!isDataLoaded) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(androidx.compose.material3.MaterialTheme.colorScheme.background),
+            contentAlignment = androidx.compose.ui.Alignment.Center
+        ) {
+            Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+                androidx.compose.material3.CircularProgressIndicator()
+                androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(16.dp))
+                androidx.compose.material3.Text(
+                    text = "جارٍ تحميل الدروس…",
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onBackground
+                )
+            }
+        }
+        return
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),

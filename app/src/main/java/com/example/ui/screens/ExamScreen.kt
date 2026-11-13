@@ -45,6 +45,8 @@ import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material.icons.outlined.Timer
 import kotlinx.coroutines.delay
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -78,6 +80,11 @@ import androidx.compose.ui.unit.sp
 import com.example.model.AnswerItem
 import com.example.model.ExamTable
 import com.example.model.ExamData
+import com.example.model.ExamGrade
+import com.example.model.GradeMode
+import com.example.model.QuestionGrade
+import com.example.model.SectionGrade
+import com.example.util.ExamGrader
 import com.example.model.ExamQuestion
 import com.example.model.ExamSection
 import com.example.model.ExamTopic
@@ -97,17 +104,22 @@ import com.example.viewmodel.ArabicAppViewModel
 
 @Composable
 fun ExamScreen(viewModel: ArabicAppViewModel) {
-    BackHandler {
-        viewModel.navigateBackToTabs()
-    }
-
     val exam by viewModel.currentExam.collectAsState()
     val settings by viewModel.settings.collectAsState()
     val scrollState = rememberScrollState()
 
     val isSubmitted = viewModel.isExamSubmitted
+    val isStarted = viewModel.isExamStarted
     val showCorrection = viewModel.showCorrectionModel
-    val validationError = viewModel.examValidationError
+    val inProgress = isStarted && !isSubmitted
+
+    var showLeaveDialog by remember { mutableStateOf(false) }
+    var showSubmitDialog by remember { mutableStateOf(false) }
+
+    // While an exam is running, leaving it means submitting it.
+    BackHandler {
+        if (inProgress) showLeaveDialog = true else viewModel.navigateBackToTabs()
+    }
 
     if (exam == null) {
         Box(
@@ -128,32 +140,72 @@ fun ExamScreen(viewModel: ArabicAppViewModel) {
 
     val currentExam = exam!!
 
-    // Parse duration in seconds if specified (e.g., "ساعة" -> 3600s, "ساعتان" -> 7200s, "45 دقيقة" -> 2700s)
+    // The timer is derived from a saved end time, so it survives rotation and app restarts
+    // and cannot be paused or reset.
+    val endsAt = viewModel.examEndsAt[currentExam.id] ?: 0L
+    val timed = endsAt > 0L
     val totalDurationSeconds = remember(currentExam.id, currentExam.duration) {
-        val d = currentExam.duration.trim()
-        when {
-            d.contains("ساعتان") || d.contains("ساعتين") -> 7200
-            d.contains("ساعة ونصف") -> 5400
-            d.contains("ساعة") -> 3600
-            d.contains("45") -> 2700
-            d.contains("30") || d.contains("نصف ساعة") -> 1800
-            else -> null // "مرنة" or unspecified
-        }
+        ExamGrader.durationSeconds(currentExam.duration)
     }
 
-    var remainingSeconds by remember(currentExam.id) {
-        mutableStateOf(totalDurationSeconds ?: 0)
-    }
-    var isTimerRunning by remember(currentExam.id) {
-        mutableStateOf(!isSubmitted && totalDurationSeconds != null)
-    }
-
-    // Timer countdown effect
-    LaunchedEffect(isTimerRunning, remainingSeconds, isSubmitted) {
-        if (isTimerRunning && !isSubmitted && remainingSeconds > 0) {
+    var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(currentExam.id, inProgress, endsAt) {
+        while (inProgress) {
+            nowMs = System.currentTimeMillis()
+            if (timed && nowMs >= endsAt) {
+                viewModel.submitExam(auto = true)
+                break
+            }
             delay(1000L)
-            remainingSeconds -= 1
         }
+    }
+    val remainingSeconds = if (timed) ((endsAt - nowMs).coerceAtLeast(0L) / 1000L).toInt() else 0
+
+    val grade: ExamGrade? = if (isSubmitted) viewModel.gradeCurrentExam() else null
+
+    if (showLeaveDialog) {
+        AlertDialog(
+            onDismissRequest = { showLeaveDialog = false },
+            title = { Text("الخروج يعني تسليم الفرض", fontWeight = FontWeight.Bold) },
+            text = {
+                Text("لا يمكنك مغادرة الامتحان أثناء المدة. إن خرجتَ الآن سيُسلَّم الفرض بما كتبتَه ولن تستطيع تعديله. هل تريد التسليم الآن؟")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showLeaveDialog = false
+                    viewModel.submitExam()
+                }) { Text("تسليم الآن", color = ErrorRed, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLeaveDialog = false }) { Text("متابعة الامتحان") }
+            }
+        )
+    }
+
+    if (showSubmitDialog) {
+        val unanswered = viewModel.unansweredCount(currentExam)
+        AlertDialog(
+            onDismissRequest = { showSubmitDialog = false },
+            title = { Text("تسليم الفرض", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    if (unanswered > 0) {
+                        "لم تجب عن $unanswered من الأسئلة، وستُحتسب لها نقطة الصفر. هل تريد التسليم الآن؟ لن تستطيع تعديل إجاباتك بعد ذلك."
+                    } else {
+                        "هل أنت متأكد من تسليم الفرض؟ لن تستطيع تعديل إجاباتك بعد ذلك."
+                    }
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showSubmitDialog = false
+                    viewModel.submitExam()
+                }) { Text("تسليم", fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSubmitDialog = false }) { Text("متابعة الكتابة") }
+            }
+        )
     }
 
     Scaffold(
@@ -168,18 +220,23 @@ fun ExamScreen(viewModel: ArabicAppViewModel) {
                         .padding(horizontal = 8.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(
-                        onClick = { viewModel.navigateBackToTabs() },
-                        modifier = Modifier.testTag("exam_back_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "الرجوع",
-                            tint = Color.White
-                        )
-                    }
+                    if (inProgress) {
+                        // No navigation while the exam is running.
+                        Spacer(modifier = Modifier.width(12.dp))
+                    } else {
+                        IconButton(
+                            onClick = { viewModel.navigateBackToTabs() },
+                            modifier = Modifier.testTag("exam_back_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "الرجوع",
+                                tint = Color.White
+                            )
+                        }
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
 
                     Column(
                         modifier = Modifier.weight(1f),
@@ -229,141 +286,104 @@ fun ExamScreen(viewModel: ArabicAppViewModel) {
                 .padding(horizontal = 16.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Exam Timer Card (for timed assessments and exams)
-            if (totalDurationSeconds != null) {
-                val hours = remainingSeconds / 3600
-                val minutes = (remainingSeconds % 3600) / 60
-                val seconds = remainingSeconds % 60
-                val timeString = if (hours > 0) {
-                    String.format("%02d:%02d:%02d", hours, minutes, seconds)
-                } else {
-                    String.format("%02d:%02d", minutes, seconds)
-                }
+            if (!isStarted && !isSubmitted) {
+                ExamIntroCard(
+                    exam = currentExam,
+                    durationSeconds = totalDurationSeconds,
+                    onStart = { viewModel.startExam() },
+                    onBack = { viewModel.navigateBackToTabs() }
+                )
+            } else {
+            if (inProgress) {
+                if (timed) {
+                    val hours = remainingSeconds / 3600
+                    val minutes = (remainingSeconds % 3600) / 60
+                    val seconds = remainingSeconds % 60
+                    val timeString = if (hours > 0) {
+                        String.format("%02d:%02d:%02d", hours, minutes, seconds)
+                    } else {
+                        String.format("%02d:%02d", minutes, seconds)
+                    }
+                    val isUrgent = remainingSeconds in 1..300
+                    val timerColor = if (isUrgent) Color(0xFFD84315) else MaterialTheme.colorScheme.primary
 
-                val isTimeUp = remainingSeconds <= 0
-                val isUrgent = remainingSeconds in 1..300 // under 5 minutes
-
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = when {
-                            isTimeUp -> ErrorBgLight
-                            isUrgent -> Color(0xFFFFF3E0)
-                            else -> MaterialTheme.colorScheme.surfaceVariant
-                        }
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isUrgent) Color(0xFFFFF3E0) else MaterialTheme.colorScheme.surfaceVariant
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                     ) {
                         Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Box(
                                 modifier = Modifier
                                     .size(40.dp)
                                     .clip(CircleShape)
-                                    .background(
-                                        when {
-                                            isTimeUp -> ErrorRed.copy(alpha = 0.15f)
-                                            isUrgent -> Color(0xFFE65100).copy(alpha = 0.15f)
-                                            else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                                        }
-                                    ),
+                                    .background(timerColor.copy(alpha = 0.15f)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = if (isTimerRunning) Icons.Filled.Timer else Icons.Outlined.Timer,
+                                    imageVector = Icons.Filled.Timer,
                                     contentDescription = "المؤقت",
-                                    tint = when {
-                                        isTimeUp -> ErrorRed
-                                        isUrgent -> Color(0xFFE65100)
-                                        else -> MaterialTheme.colorScheme.primary
-                                    },
+                                    tint = timerColor,
                                     modifier = Modifier.size(22.dp)
                                 )
                             }
-
                             Column {
                                 Text(
-                                    text = when {
-                                        isSubmitted -> "انتهى وقت الفرض وتم التسليم"
-                                        isTimeUp -> "انتهى الوقت المحدد للاختبار!"
-                                        isUrgent -> "الوقت المتبقي قارب على الانتهاء"
-                                        else -> "مؤقت حل الاختبار (${currentExam.duration})"
-                                    },
+                                    text = if (isUrgent) "الوقت المتبقي قارب على الانتهاء" else "الوقت المتبقي (${currentExam.duration})",
                                     fontSize = 12.sp,
-                                    color = when {
-                                        isTimeUp -> ErrorRed
-                                        isUrgent -> Color(0xFFE65100)
-                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
+                                    color = if (isUrgent) Color(0xFFE65100) else MaterialTheme.colorScheme.onSurfaceVariant,
                                     fontWeight = FontWeight.Medium
                                 )
                                 Text(
-                                    text = if (isTimeUp) "00:00:00" else timeString,
-                                    fontSize = 20.sp,
+                                    text = timeString,
+                                    fontSize = 22.sp,
                                     fontWeight = FontWeight.Bold,
                                     fontFamily = AmiriFontFamily,
-                                    color = when {
-                                        isTimeUp -> ErrorRed
-                                        isUrgent -> Color(0xFFD84315)
-                                        else -> MaterialTheme.colorScheme.primary
-                                    }
+                                    color = timerColor
                                 )
-                            }
-                        }
-
-                        // Play / Pause / Reset Controls for student
-                        if (!isSubmitted) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                IconButton(
-                                    onClick = { isTimerRunning = !isTimerRunning },
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.surface)
-                                ) {
-                                    Icon(
-                                        imageVector = if (isTimerRunning) Icons.Outlined.Pause else Icons.Filled.PlayArrow,
-                                        contentDescription = if (isTimerRunning) "إيقاف مؤقت" else "تشغيل المؤقت",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-
-                                IconButton(
-                                    onClick = {
-                                        remainingSeconds = totalDurationSeconds
-                                        isTimerRunning = true
-                                    },
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.surface)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Refresh,
-                                        contentDescription = "إعادة ضبط المؤقت",
-                                        tint = TextSecondaryLight,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
                             }
                         }
                     }
                 }
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = ErrorBgLight),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, ErrorRed)
+                ) {
+                    Text(
+                        text = if (timed) {
+                            "تنبيه: يُمنع التنقل أو مغادرة الامتحان أثناء المدة، والمؤقت لا يتوقف ولو خرجتَ من الشاشة. عند انتهاء الوقت يُسلَّم الفرض تلقائياً بما كتبتَه."
+                        } else {
+                            "تنبيه: يُمنع التنقل أو مغادرة الامتحان قبل التسليم؛ الخروج منه يعني تسليم الفرض."
+                        },
+                        color = ErrorRed,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        lineHeight = 20.sp,
+                        textAlign = TextAlign.Start,
+                        modifier = Modifier.padding(12.dp)
+                    )
+                }
             }
+
+            if (isSubmitted && grade != null) {
+                ExamResultCard(
+                    grade = grade,
+                    auto = viewModel.examAutoSubmitted[currentExam.id] == true
+                )
+            }
+
             // Header Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -381,35 +401,18 @@ fun ExamScreen(viewModel: ArabicAppViewModel) {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (isSubmitted) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(GoldLight.copy(alpha = 0.35f))
-                                    .border(1.dp, GoldAccent, RoundedCornerShape(8.dp))
-                                    .padding(horizontal = 12.dp, vertical = 6.dp)
-                            ) {
-                                Text(
-                                    text = "مجموع نقط الفرض: ${currentExam.declaredTotal} / 20 نقطة",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
-                                    color = PrimaryDarkTeal
-                                )
-                            }
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(PrimaryDarkTeal.copy(alpha = 0.1f))
-                                    .padding(horizontal = 12.dp, vertical = 6.dp)
-                            ) {
-                                Text(
-                                    text = "المجموع: ${currentExam.declaredTotal} نقطة",
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 13.sp,
-                                    color = PrimaryDarkTeal
-                                )
-                            }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(PrimaryDarkTeal.copy(alpha = 0.1f))
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = "المجموع: ${currentExam.declaredTotal} نقطة",
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 13.sp,
+                                color = PrimaryDarkTeal
+                            )
                         }
 
                         Text(
@@ -441,81 +444,15 @@ fun ExamScreen(viewModel: ArabicAppViewModel) {
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
                         text = if (isSubmitted) {
-                            "تم تسليم الفرض ومراجعة إجاباتك مقابل عناصر الإجابة وسلم التنقيط."
+                            "تم التسليم. قارن إجابتك بالإجابة النموذجية أسفل كل سؤال؛ التصحيح الآلي تقديري يعتمد مطابقة الكلمات."
                         } else {
-                            "أجب عن جميع الأسئلة في الخانات المخصصة. نموذج التصحيح وسلم التنقيط محجوب ولن يظهر إلا بعد الضغط على زر «تسليم الفرض»."
+                            "أجب عن الأسئلة في الخانات المخصصة. لن تظهر الإجابات النموذجية ونقطتك إلا بعد التسليم."
                         },
                         fontSize = 13.sp,
                         color = TextMutedLight,
                         lineHeight = 20.sp,
                         textAlign = TextAlign.Start
                     )
-                }
-            }
-
-            // Validation Error Alert Banner
-            if (validationError != null) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = ErrorBgLight),
-                    border = androidx.compose.foundation.BorderStroke(1.5.dp, ErrorRed)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.ErrorOutline,
-                            contentDescription = null,
-                            tint = ErrorRed,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Text(
-                            text = validationError,
-                            color = ErrorRed,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            lineHeight = 20.sp,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            }
-
-            // Submission Success Banner
-            if (isSubmitted) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F3EE)),
-                    border = androidx.compose.foundation.BorderStroke(1.5.dp, SuccessGreen)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = SuccessGreen,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Text(
-                            text = "تم تسليم الفرض بنجاح! تم فتح نموذج التصحيح وسلم التنقيط لكل سؤال أدناه للمراجعة والتقويم الذاتي.",
-                            color = PrimaryDarkTeal,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            lineHeight = 20.sp,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
                 }
             }
 
@@ -536,6 +473,9 @@ fun ExamScreen(viewModel: ArabicAppViewModel) {
                     section = section,
                     isSubmitted = isSubmitted,
                     showCorrection = showCorrection,
+                    grade = grade,
+                    ratings = viewModel.examRatings,
+                    onRate = { index, rating -> viewModel.setRubricRating(section.id, index, rating) },
                     examAnswers = viewModel.examAnswers,
                     selectedTopicId = viewModel.getSelectedExamTopic(currentExam.id, section.id),
                     onSelectTopic = { topicId ->
@@ -558,7 +498,7 @@ fun ExamScreen(viewModel: ArabicAppViewModel) {
             ) {
                 if (!isSubmitted) {
                     Button(
-                        onClick = { viewModel.submitExam() },
+                        onClick = { showSubmitDialog = true },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(54.dp)
@@ -638,6 +578,7 @@ fun ExamScreen(viewModel: ArabicAppViewModel) {
             }
 
             Spacer(modifier = Modifier.height(24.dp))
+            } // end of started / submitted content
         }
     }
 }
@@ -749,6 +690,9 @@ private fun SectionCard(
     section: ExamSection,
     isSubmitted: Boolean,
     showCorrection: Boolean,
+    grade: ExamGrade?,
+    ratings: Map<String, Float>,
+    onRate: (Int, Float) -> Unit,
     examAnswers: Map<String, String>,
     selectedTopicId: String?,
     onSelectTopic: (String) -> Unit,
@@ -783,7 +727,9 @@ private fun SectionCard(
                             .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = "${section.points} نقط",
+                            text = grade?.sections?.firstOrNull { it.sectionId == section.id }
+                                ?.let { "${ExamGrader.formatScore(it.earned)} / ${ExamGrader.formatScore(it.max)} نقط" }
+                                ?: "${section.points} نقط",
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp,
                             color = PrimaryDarkTeal
@@ -814,6 +760,7 @@ private fun SectionCard(
                     sectionId = section.id,
                     question = question,
                     studentAnswer = currentAnswer,
+                    grade = grade?.questions?.get("${section.id}_${question.no}"),
                     isSubmitted = isSubmitted,
                     showCorrection = showCorrection,
                     onAnswerChange = { onAnswerChange(answerKey, it) },
@@ -829,6 +776,10 @@ private fun SectionCard(
                 val studentWriting = examAnswers[writingKey] ?: ""
 
                 WritingSectionCard(
+                    examId = examId,
+                    sectionGrade = grade?.sections?.firstOrNull { it.sectionId == section.id },
+                    ratings = ratings,
+                    onRate = onRate,
                     section = section,
                     selectedTopicId = selectedTopicId,
                     onSelectTopic = onSelectTopic,
@@ -848,6 +799,7 @@ private fun QuestionCard(
     sectionId: String,
     question: ExamQuestion,
     studentAnswer: String,
+    grade: QuestionGrade?,
     isSubmitted: Boolean,
     showCorrection: Boolean,
     onAnswerChange: (String) -> Unit,
@@ -868,14 +820,24 @@ private fun QuestionCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (isSubmitted) {
+                val badgeColor = when {
+                    grade == null -> GoldAccent
+                    grade.isFull -> SuccessGreen
+                    grade.isEmpty -> ErrorRed
+                    else -> GoldAccent
+                }
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
-                        .background(GoldAccent.copy(alpha = 0.25f))
+                        .background(badgeColor.copy(alpha = 0.25f))
                         .padding(horizontal = 8.dp, vertical = 2.dp)
                 ) {
                     Text(
-                        text = "${question.points} ن",
+                        text = if (grade != null) {
+                            "${ExamGrader.formatScore(grade.earned)} / ${ExamGrader.formatScore(grade.max)}"
+                        } else {
+                            "${question.points} ن"
+                        },
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryDarkTeal
@@ -926,13 +888,22 @@ private fun QuestionCard(
 
         // Student answer: a fill-in table, or a free-text field
         if (question.table != null) {
-            ExamTableView(
-                table = question.table,
-                studentAnswer = studentAnswer,
-                onAnswerChange = onAnswerChange,
-                enabled = !isSubmitted,
-                fontScale = fontScale
-            )
+            if (isSubmitted && grade != null) {
+                GradedTableView(
+                    table = question.table,
+                    studentAnswer = studentAnswer,
+                    grade = grade,
+                    fontScale = fontScale
+                )
+            } else {
+                ExamTableView(
+                    table = question.table,
+                    studentAnswer = studentAnswer,
+                    onAnswerChange = onAnswerChange,
+                    enabled = !isSubmitted,
+                    fontScale = fontScale
+                )
+            }
         } else {
                     OutlinedTextField(
                 value = studentAnswer,
@@ -968,6 +939,14 @@ private fun QuestionCard(
                 minLines = if (question.points >= 2.0) 3 else 1
             )
 
+        }
+
+        if (isSubmitted && grade != null) {
+            QuestionResultBlock(
+                grade = grade,
+                answerBlank = studentAnswer.replace(ExamGrader.CELL_SEPARATOR, "").isBlank(),
+                isTable = question.table != null
+            )
         }
 
         // Model Answer strictly hidden until submission
@@ -1122,6 +1101,10 @@ private fun QuestionCorrectionCard(
 
 @Composable
 private fun WritingSectionCard(
+    examId: String,
+    sectionGrade: SectionGrade?,
+    ratings: Map<String, Float>,
+    onRate: (Int, Float) -> Unit,
     section: ExamSection,
     selectedTopicId: String?,
     onSelectTopic: (String) -> Unit,
@@ -1152,7 +1135,11 @@ private fun WritingSectionCard(
                         .padding(horizontal = 8.dp, vertical = 2.dp)
                 ) {
                     Text(
-                        text = "${section.points} ن",
+                        text = if (sectionGrade != null) {
+                            "${ExamGrader.formatScore(sectionGrade.earned)} / ${ExamGrader.formatScore(sectionGrade.max)}"
+                        } else {
+                            "${section.points} ن"
+                        },
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryDarkTeal
@@ -1353,42 +1340,92 @@ private fun WritingSectionCard(
                                 color = PrimaryDarkTeal
                             )
 
-                            section.rubric.forEach { item ->
+                            Text(
+                                text = if (studentWriting.isBlank()) {
+                                    "لم تكتب موضوع الإنشاء، فنقطته صفر."
+                                } else {
+                                    "قدّر إنشاءك بصدق على كل معيار؛ تُحتسب نقطتك من تقديرك."
+                                },
+                                fontSize = 12.sp,
+                                color = TextSecondaryLight
+                            )
+
+                            section.rubric.forEachIndexed { index, item ->
+                                val rating = ratings["${examId}_${section.id}_r$index"]
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(8.dp),
                                     colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.85f))
                                 ) {
-                                    Row(
+                                    Column(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
+                                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(PrimaryDarkTeal.copy(alpha = 0.12f))
-                                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .background(PrimaryDarkTeal.copy(alpha = 0.12f))
+                                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                                            ) {
+                                                Text(
+                                                    text = "${ExamGrader.formatScore(item.points)} ن",
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 12.sp,
+                                                    color = PrimaryDarkTeal
+                                                )
+                                            }
+
                                             Text(
-                                                text = "${item.points} ن",
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 12.sp,
-                                                color = PrimaryDarkTeal
+                                                text = item.criterion,
+                                                fontSize = 13.sp,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .padding(start = 8.dp),
+                                                textAlign = TextAlign.Start
                                             )
                                         }
 
-                                        Text(
-                                            text = item.criterion,
-                                            fontSize = 13.sp,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .padding(start = 8.dp),
-                                            textAlign = TextAlign.Start
-                                        )
+                                        if (studentWriting.isNotBlank()) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                listOf(1f to "أتقنتُ", 0.5f to "جزئياً", 0f to "لم أتقن").forEach { option ->
+                                                    val selected = rating == option.first
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .weight(1f)
+                                                            .clip(RoundedCornerShape(8.dp))
+                                                            .background(if (selected) PrimaryDarkTeal else Color.White)
+                                                            .border(
+                                                                1.dp,
+                                                                if (selected) PrimaryDarkTeal else BorderLight,
+                                                                RoundedCornerShape(8.dp)
+                                                            )
+                                                            .clickable { onRate(index, option.first) }
+                                                            .padding(vertical = 7.dp),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Text(
+                                                            text = option.second,
+                                                            color = if (selected) Color.White else PrimaryDarkTeal,
+                                                            fontSize = 12.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            softWrap = false,
+                                                            maxLines = 1
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -1559,6 +1596,336 @@ private fun ExamAnswerTable(table: ExamTable, fontScale: Float) {
                                 lineHeight = (22 * fontScale).sp,
                                 color = if (wasGiven) PrimaryDarkTeal else Color(0xFF133E32)
                             )
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (scrollable) {
+        Box(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) { tableContent() }
+    } else {
+        tableContent()
+    }
+}
+
+
+@Composable
+private fun ExamIntroCard(
+    exam: ExamData,
+    durationSeconds: Int?,
+    onStart: () -> Unit,
+    onBack: () -> Unit
+) {
+    val hasWriting = exam.sections.any { it.id == "C" || it.topic != null || it.topics.isNotEmpty() }
+    val questionCount = exam.sections.sumOf { it.questions.size } + if (hasWriting) 1 else 0
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "قبل أن تبدأ",
+                fontFamily = AmiriFontFamily,
+                fontWeight = FontWeight.Bold,
+                fontSize = 22.sp,
+                color = PrimaryDarkTeal
+            )
+            Text(
+                text = exam.title,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.sp,
+                color = TextSecondaryLight,
+                textAlign = TextAlign.Start
+            )
+            HorizontalDivider(color = BorderLight)
+            val lines = buildList {
+                if (durationSeconds != null) {
+                    add("مدة الامتحان: ${exam.duration}. يبدأ المؤقت فور الضغط على «ابدأ الامتحان»، ولا يمكن إيقافه ولا إعادة ضبطه.")
+                } else {
+                    add("هذا الامتحان بلا مؤقت، لكن الخروج منه يعني تسليمه.")
+                }
+                add("عدد الأسئلة: $questionCount${if (hasWriting) " (منها موضوع الإنشاء)" else ""}.")
+                add("تُحفظ إجاباتك تلقائياً، ويستمر الوقت حتى لو أُغلق التطبيق.")
+                if (durationSeconds != null) add("عند انتهاء الوقت يُسلَّم الفرض تلقائياً بما كتبتَه، وتظهر نقطتك مع الإجابات النموذجية.")
+            }
+            lines.forEach { line ->
+                Text(
+                    text = "• $line",
+                    fontSize = 14.sp,
+                    lineHeight = 22.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Start
+                )
+            }
+            Text(
+                text = "تنبيه: بعد البدء يُمنع التنقل أو مغادرة الامتحان؛ زر الرجوع يعني تسليم الفرض.",
+                color = ErrorRed,
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                lineHeight = 20.sp,
+                textAlign = TextAlign.Start
+            )
+            Button(
+                onClick = onStart,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .testTag("start_exam_button"),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryDarkTeal)
+            ) {
+                Text(
+                    text = "ابدأ الامتحان",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp,
+                    color = Color.White,
+                    softWrap = false,
+                    maxLines = 1
+                )
+            }
+            OutlinedButton(
+                onClick = onBack,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(text = "رجوع", color = TextSecondaryLight, fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExamResultCard(grade: ExamGrade, auto: Boolean) {
+    val ratio = if (grade.max > 0.0) grade.total / grade.max else 0.0
+    val verdict = when {
+        ratio >= 0.9 -> "ممتاز"
+        ratio >= 0.75 -> "جيد جداً"
+        ratio >= 0.6 -> "جيد"
+        ratio >= 0.5 -> "مقبول"
+        else -> "تحتاج إلى مراجعة"
+    }
+    val color = when {
+        ratio >= 0.6 -> SuccessGreen
+        ratio >= 0.5 -> GoldAccent
+        else -> ErrorRed
+    }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = androidx.compose.foundation.BorderStroke(1.5.dp, color),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "نقطتك التقديرية",
+                fontSize = 14.sp,
+                color = TextSecondaryLight,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = "${ExamGrader.formatScore(grade.total)} / ${ExamGrader.formatScore(grade.max)}",
+                fontFamily = AmiriFontFamily,
+                fontWeight = FontWeight.Bold,
+                fontSize = 38.sp,
+                color = color,
+                modifier = Modifier.testTag("exam_score_text")
+            )
+            Text(text = verdict, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = color)
+            if (auto) {
+                Text(
+                    text = "سُلِّم الفرض تلقائياً عند انتهاء الوقت.",
+                    fontSize = 12.sp,
+                    color = ErrorRed,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+            HorizontalDivider(color = BorderLight)
+            grade.sections.forEach { sec ->
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = sec.title,
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f),
+                            textAlign = TextAlign.Start
+                        )
+                        Text(
+                            text = "${ExamGrader.formatScore(sec.earned)} / ${ExamGrader.formatScore(sec.max)}",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryDarkTeal,
+                            softWrap = false,
+                            maxLines = 1
+                        )
+                    }
+                    if (sec.needsSelfRating) {
+                        Text(
+                            text = "قدّر إنشاءك بالمعايير في أسفل الصفحة لتكتمل نقطتك.",
+                            fontSize = 12.sp,
+                            color = Color(0xFFE65100),
+                            textAlign = TextAlign.Start
+                        )
+                    }
+                }
+            }
+            HorizontalDivider(color = BorderLight)
+            Text(
+                text = "النقطة تقديرية: يُصحَّح الجواب بمطابقة الكلمات الأساسية، فقد تُظلَم عبارة صحيحة صيغت بكلمات مختلفة. قارن دائماً بالإجابة النموذجية.",
+                fontSize = 12.sp,
+                lineHeight = 18.sp,
+                color = TextMutedLight,
+                textAlign = TextAlign.Start
+            )
+        }
+    }
+}
+
+@Composable
+private fun QuestionResultBlock(grade: QuestionGrade, answerBlank: Boolean, isTable: Boolean) {
+    val partialColor = Color(0xFFE65100)
+    val status = when {
+        answerBlank -> Triple("✘", "لم تجب عن هذا السؤال", ErrorRed)
+        grade.isFull -> Triple("✔", "إجابة صحيحة", SuccessGreen)
+        grade.isEmpty -> Triple("✘", "إجابة غير صحيحة", ErrorRed)
+        else -> Triple("◐", "إجابة جزئية", partialColor)
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(text = status.first, color = status.third, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Text(
+                text = "${status.second}: ${ExamGrader.formatScore(grade.earned)} من ${ExamGrader.formatScore(grade.max)}",
+                color = status.third,
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp
+            )
+        }
+        if (grade.mode == GradeMode.OPINION) {
+            Text(
+                text = "سؤال رأي: تُقبل كل إجابة معلَّلة، ويُقدَّر الجواب بحسب اكتماله.",
+                fontSize = 12.sp,
+                color = TextSecondaryLight
+            )
+        } else if (!isTable && grade.items.size > 1 && !answerBlank) {
+            grade.items.forEach { item ->
+                val f = item.fraction
+                val symbol = if (f >= 0.99) "✔" else if (f >= 0.25) "◐" else "✘"
+                val col = if (f >= 0.99) SuccessGreen else if (f >= 0.25) partialColor else ErrorRed
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(text = symbol, color = col, fontSize = 13.sp)
+                    Text(
+                        text = item.label.ifBlank { "عنصر من الإجابة" },
+                        fontSize = 12.sp,
+                        color = TextSecondaryLight
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun tableBlankIndex(table: ExamTable): Map<Pair<Int, Int>, Int> {
+    val map = mutableMapOf<Pair<Int, Int>, Int>()
+    ExamGrader.blankCells(table).forEachIndexed { index, cell -> map[cell] = index }
+    return map
+}
+
+@Composable
+private fun GradedTableView(
+    table: ExamTable,
+    studentAnswer: String,
+    grade: QuestionGrade,
+    fontScale: Float
+) {
+    val columnCount = table.headers.size.coerceAtLeast(1)
+    val scrollable = columnCount > 3
+    val blankIndex = remember(table) { tableBlankIndex(table) }
+    val tableContent: @Composable () -> Unit = {
+        Column(
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .border(1.dp, PrimaryDarkTeal.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+        ) {
+            Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+                for (c in 0 until columnCount) {
+                    ExamTableCell(scrollable, PrimaryDarkTeal) {
+                        Text(
+                            text = table.headers.getOrElse(c) { "" },
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            }
+            table.rows.forEachIndexed { r, row ->
+                Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+                    for (c in 0 until columnCount) {
+                        val cell = row.getOrElse(c) { "" }
+                        val idx = blankIndex[r to c]
+                        if (idx == null) {
+                            ExamTableCell(scrollable, TABLE_GIVEN_CELL_COLOR) {
+                                Text(
+                                    text = cell,
+                                    fontFamily = AmiriFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = (15 * fontScale).sp,
+                                    lineHeight = (22 * fontScale).sp,
+                                    color = PrimaryDarkTeal
+                                )
+                            }
+                        } else {
+                            val item = grade.items.getOrNull(idx)
+                            val f = item?.fraction ?: 0.0
+                            val background = when {
+                                f >= 0.99 -> Color(0xFFE3F2E8)
+                                f >= 0.25 -> Color(0xFFFFF3E0)
+                                else -> Color(0xFFFDE8E8)
+                            }
+                            ExamTableCell(scrollable, background) {
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text(
+                                        text = item?.student?.takeIf { it.isNotBlank() } ?: "—",
+                                        fontFamily = AmiriFontFamily,
+                                        fontSize = (15 * fontScale).sp,
+                                        lineHeight = (22 * fontScale).sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    if (item != null && f < 0.99) {
+                                        Text(
+                                            text = "الصحيح: ${item.expected}",
+                                            fontSize = 12.sp,
+                                            lineHeight = 17.sp,
+                                            color = SuccessGreen,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }

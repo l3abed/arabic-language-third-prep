@@ -266,8 +266,13 @@ fun HomeScreen(
                                             fontSize = 16.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
+                                        val dueNow = viewModel.getDueMistakesCount()
                                         Text(
-                                            text = "أسئلة أخطأت فيها مرتبة حسب الأحدث",
+                                            text = if (dueNow > 0) {
+                                                "$dueNow سؤال مستحق للمراجعة اليوم"
+                                            } else {
+                                                "لا شيء مستحق اليوم؛ الأسئلة التالية في موعدها"
+                                            },
                                             fontSize = 11.sp,
                                             color = TextSecondaryLight
                                         )
@@ -286,6 +291,23 @@ fun HomeScreen(
                                         fontSize = 12.sp,
                                         color = PrimaryDarkTeal
                                     )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            // Spaced review: starts a session with the questions due today
+                            if (viewModel.getDueMistakesCount() > 0) {
+                                Button(
+                                    onClick = { viewModel.startReviewSession() },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(46.dp)
+                                        .testTag("start_review_button"),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryDarkTeal)
+                                ) {
+                                    Text("ابدأ مراجعة اليوم", fontWeight = FontWeight.Bold, color = Color.White)
                                 }
                             }
 

@@ -27,6 +27,9 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -55,6 +58,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.ExerciseItem
+import com.example.model.MistakeReviewItem
 import com.example.ui.theme.AmiriFontFamily
 import com.example.ui.theme.BorderLight
 import com.example.ui.theme.ErrorBgLight
@@ -68,6 +72,7 @@ import com.example.ui.theme.TextSecondaryLight
 import com.example.util.TextHelper
 import com.example.viewmodel.ArabicAppViewModel
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ExerciseScreen(
     viewModel: ArabicAppViewModel,
@@ -80,10 +85,20 @@ fun ExerciseScreen(
     val activeLessonId by viewModel.activeLessonId.collectAsState()
     val lessons by viewModel.lessons.collectAsState()
     val settings by viewModel.settings.collectAsState()
+    val reviewItems by viewModel.reviewSession.collectAsState()
 
-    val lesson = lessons.firstOrNull { it.id == activeLessonId }
+    // Either one lesson's exercises, or a spaced-review session across lessons.
+    val review: List<MistakeReviewItem>? = reviewItems
+    val lesson = if (review == null) lessons.firstOrNull { it.id == activeLessonId } else null
+    val sessionId = if (review != null) "review" else (lesson?.id ?: "none")
+    val sessionTitle = if (review != null) "مراجعة المتباعدة" else (lesson?.title ?: "")
+    val exercises: List<ExerciseItem> = review?.mapNotNull { it.exercise } ?: lesson?.exercises.orEmpty()
+    // Every question knows its lesson, so answers are recorded against the right lesson.
+    val lessonIdFor: (Int) -> String = { index ->
+        if (review != null) review.getOrNull(index)?.lessonId.orEmpty() else lesson?.id.orEmpty()
+    }
 
-    if (lesson == null || lesson.exercises.isEmpty()) {
+    if (exercises.isEmpty()) {
         Box(
             modifier = modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
@@ -93,17 +108,26 @@ fun ExerciseScreen(
         return
     }
 
-    var questionIndex by remember(lesson.id) { mutableIntStateOf(0) }
-    var score by remember(lesson.id) { mutableIntStateOf(0) }
-    var isAnswerSubmitted by remember(lesson.id, questionIndex) { mutableStateOf(false) }
-    var isAnswerCorrect by remember(lesson.id, questionIndex) { mutableStateOf(false) }
-    var selectedOptionIndex by remember(lesson.id, questionIndex) { mutableStateOf<Int?>(null) }
-    var selectedBoolAnswer by remember(lesson.id, questionIndex) { mutableStateOf<Boolean?>(null) }
-    val orderedWords = remember(lesson.id, questionIndex) { mutableStateListOf<String>() }
-    var isQuizCompleted by remember(lesson.id) { mutableStateOf(false) }
+    var questionIndex by remember(sessionId) { mutableIntStateOf(0) }
+    var score by remember(sessionId) { mutableIntStateOf(0) }
+    var isAnswerSubmitted by remember(sessionId, questionIndex) { mutableStateOf(false) }
+    var isAnswerCorrect by remember(sessionId, questionIndex) { mutableStateOf(false) }
+    var selectedOptionIndex by remember(sessionId, questionIndex) { mutableStateOf<Int?>(null) }
+    var selectedBoolAnswer by remember(sessionId, questionIndex) { mutableStateOf<Boolean?>(null) }
+    val orderedWords = remember(sessionId, questionIndex) { mutableStateListOf<String>() }
+    var isQuizCompleted by remember(sessionId) { mutableStateOf(false) }
+    var fillText by remember(sessionId, questionIndex) { mutableStateOf("") }
+    var shortText by remember(sessionId, questionIndex) { mutableStateOf("") }
+    var matchSelections by remember(sessionId, questionIndex) { mutableStateOf(mapOf<String, String>()) }
+    // Options are shown in a random order (fresh for each question) so the answer's position
+    // gives nothing away. Selection and correctness still use the original option indices.
+    val optionOrder = remember(sessionId, questionIndex) {
+        val count = (exercises.getOrNull(questionIndex) as? ExerciseItem.Mcq)?.options?.size ?: 0
+        (0 until count).shuffled()
+    }
 
-    val exercise = lesson.exercises.getOrNull(questionIndex)
-    val totalQuestions = lesson.exercises.size
+    val exercise = exercises.getOrNull(questionIndex)
+    val totalQuestions = exercises.size
 
     Surface(
         modifier = modifier.fillMaxSize(),
@@ -114,7 +138,7 @@ fun ExerciseScreen(
             QuizResultView(
                 score = score,
                 total = totalQuestions,
-                lessonTitle = lesson.title,
+                lessonTitle = sessionTitle,
                 onRetry = {
                     questionIndex = 0
                     score = 0
@@ -154,7 +178,7 @@ fun ExerciseScreen(
 
                 // Title
                 Text(
-                    text = "تمرين • ${TextHelper.formatArabic(lesson.title, settings.showTashkeel)}",
+                    text = if (review != null) "مراجعة • ${review.size} أسئلة مستحقة" else "تمرين • ${TextHelper.formatArabic(sessionTitle, settings.showTashkeel)}",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground,
@@ -228,6 +252,10 @@ fun ExerciseScreen(
                             is ExerciseItem.Mcq -> "اختر الإجابة الصحيحة"
                             is ExerciseItem.TrueFalse -> "حدد صح أم خطأ"
                             is ExerciseItem.OrderWords -> "رتّب الكلمات بالترتيب الصحيح"
+                            is ExerciseItem.FillBlank -> "أكمل الفراغ بالكلمة المناسبة"
+                            is ExerciseItem.Matching -> "طابق كل عنصر بما يناسبه"
+                            is ExerciseItem.ShortAnswer -> "أجب إجابة موجزة ومعلَّلة"
+                            else -> ""
                         }
                         Text(
                             text = typeLabel,
@@ -257,7 +285,8 @@ fun ExerciseScreen(
                 when (exercise) {
                     is ExerciseItem.Mcq -> {
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            exercise.options.forEachIndexed { optIndex, optionText ->
+                            optionOrder.forEach { optIndex ->
+                                val optionText = exercise.options[optIndex]
                                 val isSelected = selectedOptionIndex == optIndex
                                 val isCorrectOption = optIndex == exercise.answerIndex
 
@@ -282,9 +311,9 @@ fun ExerciseScreen(
                                             isAnswerCorrect = correct
                                             if (correct) {
                                                 score++
-                                                viewModel.recordReviewCorrect(lesson.id, questionIndex)
+                                                viewModel.recordReviewCorrect(lessonIdFor(questionIndex), questionIndex)
                                             } else {
-                                                viewModel.recordMistake(lesson.id, questionIndex)
+                                                viewModel.recordMistake(lessonIdFor(questionIndex), questionIndex)
                                             }
                                         },
                                     shape = RoundedCornerShape(14.dp),
@@ -354,9 +383,9 @@ fun ExerciseScreen(
                                             isAnswerCorrect = correct
                                             if (correct) {
                                                 score++
-                                                viewModel.recordReviewCorrect(lesson.id, questionIndex)
+                                                viewModel.recordReviewCorrect(lessonIdFor(questionIndex), questionIndex)
                                             } else {
-                                                viewModel.recordMistake(lesson.id, questionIndex)
+                                                viewModel.recordMistake(lessonIdFor(questionIndex), questionIndex)
                                             }
                                         },
                                     shape = RoundedCornerShape(14.dp),
@@ -462,7 +491,7 @@ fun ExerciseScreen(
                             }
 
                             // Source scattered words (shuffled on display)
-                            val shuffledWords = remember(lesson.id, questionIndex) {
+                            val shuffledWords = remember(sessionId, questionIndex) {
                                 exercise.words.shuffled()
                             }
                             val availableWords = shuffledWords.filter { !orderedWords.contains(it) }
@@ -528,9 +557,9 @@ fun ExerciseScreen(
                                         isAnswerCorrect = correct
                                         if (correct) {
                                             score++
-                                            viewModel.recordReviewCorrect(lesson.id, questionIndex)
+                                            viewModel.recordReviewCorrect(lessonIdFor(questionIndex), questionIndex)
                                         } else {
-                                            viewModel.recordMistake(lesson.id, questionIndex)
+                                            viewModel.recordMistake(lessonIdFor(questionIndex), questionIndex)
                                         }
                                     },
                                     modifier = Modifier
@@ -543,6 +572,241 @@ fun ExerciseScreen(
                             }
                         }
                     }
+
+                    else -> {}
+                }
+
+                // Shared "check" helper for the three new types
+                val checkAndRecord: (Boolean) -> Unit = { correct ->
+                    isAnswerSubmitted = true
+                    isAnswerCorrect = correct
+                    if (correct) {
+                        score++
+                        viewModel.recordReviewCorrect(lessonIdFor(questionIndex), questionIndex)
+                    } else {
+                        viewModel.recordMistake(lessonIdFor(questionIndex), questionIndex)
+                    }
+                }
+
+                when (exercise) {
+                    is ExerciseItem.FillBlank -> {
+                        val options = remember(sessionId, questionIndex) { exercise.options.shuffled() }
+                        val parts = exercise.sentence.split("____", limit = 2)
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(18.dp),
+                                verticalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                Text(
+                                    text = TextHelper.formatArabic(exercise.sentence.replace("____", "…"), settings.showTashkeel),
+                                    fontFamily = AmiriFontFamily,
+                                    fontSize = 20.sp,
+                                    lineHeight = 34.sp,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    textAlign = TextAlign.Start
+                                )
+                                if (exercise.options.isNotEmpty()) {
+                                    FlowRow(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        options.forEach { word ->
+                                            val picked = fillText == word
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .background(if (picked) PrimaryDarkTeal else Color.White)
+                                                    .border(1.dp, PrimaryDarkTeal.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+                                                    .clickable(enabled = !isAnswerSubmitted) { fillText = word }
+                                                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                                            ) {
+                                                Text(
+                                                    text = TextHelper.formatArabic(word, settings.showTashkeel),
+                                                    fontFamily = AmiriFontFamily,
+                                                    fontSize = 17.sp,
+                                                    color = if (picked) Color.White else PrimaryDarkTeal
+                                                )
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    OutlinedTextField(
+                                        value = fillText,
+                                        onValueChange = { fillText = it },
+                                        enabled = !isAnswerSubmitted,
+                                        singleLine = true,
+                                        placeholder = { Text(exercise.hint.ifBlank { "اكتب الكلمة" }) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        textStyle = androidx.compose.ui.text.TextStyle(
+                                            textDirection = androidx.compose.ui.text.style.TextDirection.Rtl,
+                                            fontFamily = AmiriFontFamily,
+                                            fontSize = 18.sp
+                                        )
+                                    )
+                                }
+                                if (!isAnswerSubmitted) {
+                                    Button(
+                                        onClick = { if (fillText.isNotBlank()) checkAndRecord(exercise.isCorrect(fillText)) },
+                                        enabled = fillText.isNotBlank(),
+                                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryDarkTeal)
+                                    ) { Text("تأكيد", fontWeight = FontWeight.Bold) }
+                                }
+                            }
+                        }
+                    }
+
+                    is ExerciseItem.Matching -> {
+                        val lefts = remember(sessionId, questionIndex) { exercise.pairs.map { it.first } }
+                        val rights = remember(sessionId, questionIndex) { exercise.pairs.map { it.second }.shuffled() }
+                        val allMatched = matchSelections.size == lefts.size
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(18.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                lefts.forEach { left ->
+                                    val chosen = matchSelections[left]
+                                    val leftCorrect = exercise.pairs.first { it.first == left }.second
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Text(
+                                            text = TextHelper.formatArabic(left, settings.showTashkeel),
+                                            fontFamily = AmiriFontFamily,
+                                            fontSize = 17.sp,
+                                            modifier = Modifier.weight(1f),
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            textAlign = TextAlign.Start
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(
+                                                    when {
+                                                        isAnswerSubmitted && chosen == leftCorrect -> Color(0xFFE3F2E8)
+                                                        isAnswerSubmitted && chosen != null -> Color(0xFFFDE8E8)
+                                                        else -> Color.White
+                                                    }
+                                                )
+                                                .border(1.dp, PrimaryDarkTeal.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+                                                .padding(10.dp)
+                                        ) {
+                                            Text(
+                                                text = if (chosen == null) "اختر…" else TextHelper.formatArabic(chosen, settings.showTashkeel),
+                                                fontFamily = AmiriFontFamily,
+                                                fontSize = 16.sp,
+                                                color = PrimaryDarkTeal
+                                            )
+                                        }
+                                    }
+                                    if (!isAnswerSubmitted) {
+                                        FlowRow(
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            rights.filter { r -> !matchSelections.containsValue(r) || matchSelections[left] == r }
+                                                .forEach { r ->
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .clip(RoundedCornerShape(8.dp))
+                                                            .border(1.dp, GoldAccent, RoundedCornerShape(8.dp))
+                                                            .clickable { matchSelections = matchSelections + (left to r) }
+                                                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                                                    ) {
+                                                        Text(
+                                                            text = TextHelper.formatArabic(r, settings.showTashkeel),
+                                                            fontFamily = AmiriFontFamily,
+                                                            fontSize = 14.sp,
+                                                            color = PrimaryDarkTeal
+                                                        )
+                                                    }
+                                                }
+                                        }
+                                    }
+                                }
+                                if (!isAnswerSubmitted) {
+                                    Button(
+                                        onClick = {
+                                            val correct = lefts.all { l -> matchSelections[l] == exercise.pairs.first { it.first == l }.second }
+                                            checkAndRecord(correct)
+                                        },
+                                        enabled = allMatched,
+                                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryDarkTeal)
+                                    ) { Text("تأكيد المزاوجة", fontWeight = FontWeight.Bold) }
+                                }
+                            }
+                        }
+                    }
+
+                    is ExerciseItem.ShortAnswer -> {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(18.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Text(
+                                    text = TextHelper.formatArabic(exercise.question, settings.showTashkeel),
+                                    fontFamily = AmiriFontFamily,
+                                    fontSize = 19.sp,
+                                    lineHeight = 30.sp,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    textAlign = TextAlign.Start
+                                )
+                                OutlinedTextField(
+                                    value = shortText,
+                                    onValueChange = { shortText = it },
+                                    enabled = !isAnswerSubmitted,
+                                    minLines = 2,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textStyle = androidx.compose.ui.text.TextStyle(
+                                        textDirection = androidx.compose.ui.text.style.TextDirection.Rtl,
+                                        fontFamily = AmiriFontFamily,
+                                        fontSize = 17.sp
+                                    )
+                                )
+                                if (!isAnswerSubmitted) {
+                                    Button(
+                                        onClick = {
+                                            val fraction = exercise.score(shortText)
+                                            checkAndRecord(fraction >= 0.99)
+                                        },
+                                        enabled = shortText.isNotBlank(),
+                                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryDarkTeal)
+                                    ) { Text("تأكيد", fontWeight = FontWeight.Bold) }
+                                } else {
+                                    Text(
+                                        text = "الإجابة النموذجية: ${TextHelper.formatArabic(exercise.answer, settings.showTashkeel)}",
+                                        fontFamily = AmiriFontFamily,
+                                        fontSize = 16.sp,
+                                        lineHeight = 26.sp,
+                                        color = SuccessGreen,
+                                        textAlign = TextAlign.Start
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    else -> {}
                 }
 
                 // Immediate Feedback Card displaying explanation
@@ -603,8 +867,11 @@ fun ExerciseScreen(
                     onClick = {
                         if (questionIndex < totalQuestions - 1) {
                             questionIndex++
+                            fillText = ""
+                            shortText = ""
+                            matchSelections = emptyMap()
                         } else {
-                            viewModel.repository.saveExerciseScore(lesson.id, score, totalQuestions)
+                            if (review == null) viewModel.repository.saveExerciseScore(lesson?.id.orEmpty(), score, totalQuestions)
                             isQuizCompleted = true
                         }
                     },

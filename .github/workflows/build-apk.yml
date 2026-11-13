@@ -34,6 +34,7 @@ jobs:
             echo "Decoding debug.keystore.base64..."
             base64 -d debug.keystore.base64 > debug.keystore
           else
+            echo "::warning::debug.keystore.base64 is missing: a NEW random signing key is generated, so this APK cannot be installed over a previous build. Commit debug.keystore.base64 to keep one stable key."
             echo "Generating new debug keystore..."
             keytool -genkeypair -v \
               -keystore debug.keystore \
@@ -55,6 +56,10 @@ jobs:
             gradle wrapper
             chmod +x gradlew
           fi
+
+      - name: Run unit tests (non-blocking)
+        continue-on-error: true
+        run: ./gradlew testDebugUnitTest --stacktrace
 
       - name: Build Debug APK
         run: ./gradlew assembleDebug --stacktrace

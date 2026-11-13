@@ -14,7 +14,11 @@ import com.example.model.IrabStep
 import com.example.model.KeyValuePair
 import com.example.model.Lesson
 import com.example.model.RubricItem
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
@@ -28,7 +32,16 @@ data class UserSettings(
     val speechRate: Float = 0.9f
 )
 
-class LessonRepository(private val context: Context) {
+class LessonRepository(
+    private val context: Context,
+    loadInBackground: Boolean = true
+) {
+    companion object {
+        /** Spaced-review intervals (days) for Leitner boxes 0..4. */
+        val REVIEW_INTERVALS_DAYS = listOf(1L, 3L, 7L, 14L, 30L)
+        const val DAY_MS = 24L * 60L * 60L * 1000L
+    }
+
     private val prefs: SharedPreferences =
         context.getSharedPreferences("arabic_study_prefs", Context.MODE_PRIVATE)
 
@@ -40,6 +53,12 @@ class LessonRepository(private val context: Context) {
 
     private val _settings = MutableStateFlow(UserSettings())
     val settings: StateFlow<UserSettings> = _settings.asStateFlow()
+
+    private val _isLoaded = MutableStateFlow(false)
+    /** True once lessons, mistakes, history and the exam cache are ready (loaded off the main thread). */
+    val isLoaded: StateFlow<Boolean> = _isLoaded.asStateFlow()
+
+    private val loadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private fun cleanDeprecatedData() {
         val editor = prefs.edit()
@@ -241,6 +260,9 @@ class LessonRepository(private val context: Context) {
                 val qIdx = obj.getInt("questionIndex")
                 val count = obj.getInt("errorCount")
                 val timestamp = obj.getLong("lastErrorTimestamp")
+                val box = obj.optInt("box", 0)
+                // Records saved by older versions have no schedule: they are due immediately.
+                val dueAt = obj.optLong("dueAt", 0L)
                 val lesson = lessonsMap[lid]
                 val exercise = lesson?.exercises?.getOrNull(qIdx)
                 val lessonTitle = lesson?.title ?: ""
@@ -252,12 +274,18 @@ class LessonRepository(private val context: Context) {
                         errorCount = count,
                         lastErrorTimestamp = timestamp,
                         lessonTitle = lessonTitle,
-                        exercise = exercise
+                        exercise = exercise,
+                        box = box,
+                        dueAt = dueAt
                     )
                 )
             }
-            // Sort by newest error first
-            _mistakeReviewItems.value = list.sortedByDescending { it.lastErrorTimestamp }
+            // Due items first (oldest due first), then the rest by newest error
+            val now = System.currentTimeMillis()
+            _mistakeReviewItems.value = list.sortedWith(
+                compareBy<com.example.model.MistakeReviewItem> { if (it.isDue(now)) 0 else 1 }
+                    .thenBy { if (it.isDue(now)) it.dueAt else -it.lastErrorTimestamp }
+            )
         } catch (e: Exception) {
             e.printStackTrace()
             _mistakeReviewItems.value = emptyList()
@@ -278,6 +306,9 @@ class LessonRepository(private val context: Context) {
                 val count = obj.getInt("errorCount") + 1
                 obj.put("errorCount", count)
                 obj.put("lastErrorTimestamp", now)
+                // A new mistake restarts the schedule.
+                obj.put("box", 0)
+                obj.put("dueAt", now + REVIEW_INTERVALS_DAYS[0] * DAY_MS)
                 updated.put(obj)
                 found = true
             } else {
@@ -290,6 +321,8 @@ class LessonRepository(private val context: Context) {
                 put("questionIndex", questionIndex)
                 put("errorCount", 1)
                 put("lastErrorTimestamp", now)
+                put("box", 0)
+                put("dueAt", now + REVIEW_INTERVALS_DAYS[0] * DAY_MS)
             }
             updated.put(newObj)
         }
@@ -297,20 +330,32 @@ class LessonRepository(private val context: Context) {
         loadMistakes()
     }
 
+    /**
+     * A correct answer advances the question one Leitner box, but only when it was due:
+     * repeating a lesson on the same day does not count as spaced review.
+     * After the last box the question is considered mastered and leaves the list.
+     */
     fun recordReviewCorrect(lessonId: String, questionIndex: Int) {
         val raw = prefs.getString("mistake_records_json", null) ?: "[]"
         val arr = JSONArray(raw)
         val updated = JSONArray()
+        val now = System.currentTimeMillis()
 
         for (i in 0 until arr.length()) {
             val obj = arr.getJSONObject(i)
             if (obj.getString("lessonId") == lessonId && obj.getInt("questionIndex") == questionIndex) {
-                val count = obj.getInt("errorCount") - 1
-                if (count > 0) {
-                    obj.put("errorCount", count)
+                val dueAt = obj.optLong("dueAt", 0L)
+                if (now >= dueAt) {
+                    val nextBox = obj.optInt("box", 0) + 1
+                    if (nextBox < REVIEW_INTERVALS_DAYS.size) {
+                        obj.put("box", nextBox)
+                        obj.put("dueAt", now + REVIEW_INTERVALS_DAYS[nextBox] * DAY_MS)
+                        updated.put(obj)
+                    }
+                    // else: mastered, omitted from the list
+                } else {
                     updated.put(obj)
                 }
-                // If count <= 0, omit it from list (removed from review list)
             } else {
                 updated.put(obj)
             }
@@ -318,6 +363,16 @@ class LessonRepository(private val context: Context) {
         prefs.edit().putString("mistake_records_json", updated.toString()).apply()
         loadMistakes()
     }
+
+    /** Questions due for spaced review now, oldest due first. */
+    fun getDueMistakes(now: Long = System.currentTimeMillis()): List<com.example.model.MistakeReviewItem> =
+        _mistakeReviewItems.value
+            .filter { it.exercise != null && it.isDue(now) }
+            .sortedBy { it.dueAt }
+
+    /** When the next question becomes due, or null if none is waiting. */
+    fun nextDueAt(now: Long = System.currentTimeMillis()): Long? =
+        _mistakeReviewItems.value.filter { !it.isDue(now) }.minOfOrNull { it.dueAt }
 
     fun clearMistakes() {
         prefs.edit().remove("mistake_records_json").apply()
@@ -342,7 +397,8 @@ class LessonRepository(private val context: Context) {
                         examId = obj.getString("examId"),
                         examTitle = obj.getString("examTitle"),
                         timestamp = obj.getLong("timestamp"),
-                        declaredTotal = obj.getInt("declaredTotal")
+                        declaredTotal = obj.getInt("declaredTotal"),
+                        score = obj.optDouble("score", -1.0)
                     )
                 )
             }
@@ -353,18 +409,51 @@ class LessonRepository(private val context: Context) {
         }
     }
 
-    fun recordExamSubmission(examId: String, examTitle: String, declaredTotal: Int) {
+    fun recordExamSubmission(examId: String, examTitle: String, declaredTotal: Int, score: Double) {
         val raw = prefs.getString("exam_history_json", null) ?: "[]"
-        val arr = JSONArray(raw)
+        val arr = try { JSONArray(raw) } catch (e: Exception) { JSONArray() }
         val obj = JSONObject().apply {
             put("examId", examId)
             put("examTitle", examTitle)
             put("timestamp", System.currentTimeMillis())
             put("declaredTotal", declaredTotal)
+            put("score", score)
         }
         arr.put(obj)
         prefs.edit().putString("exam_history_json", arr.toString()).apply()
         loadExamHistory()
+    }
+
+    /** Updates the score of the most recent record of [examId] (e.g. after the student self-rates the essay). */
+    fun updateLatestExamScore(examId: String, score: Double) {
+        val raw = prefs.getString("exam_history_json", null) ?: return
+        val arr = try { JSONArray(raw) } catch (e: Exception) { return }
+        var latestIndex = -1
+        var latestTime = Long.MIN_VALUE
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            if (o.optString("examId") == examId && o.optLong("timestamp") >= latestTime) {
+                latestTime = o.optLong("timestamp"); latestIndex = i
+            }
+        }
+        if (latestIndex < 0) return
+        arr.getJSONObject(latestIndex).put("score", score)
+        prefs.edit().putString("exam_history_json", arr.toString()).apply()
+        loadExamHistory()
+    }
+
+    // ---- Exam sessions (answers, timer end, submission state) so an exam survives app restarts ----
+    fun loadExamSession(examId: String): JSONObject? {
+        val raw = prefs.getString("exam_session_$examId", null) ?: return null
+        return try { JSONObject(raw) } catch (e: Exception) { null }
+    }
+
+    fun saveExamSession(examId: String, session: JSONObject) {
+        prefs.edit().putString("exam_session_$examId", session.toString()).apply()
+    }
+
+    fun clearExamSession(examId: String) {
+        prefs.edit().remove("exam_session_$examId").apply()
     }
 
     fun clearExamHistory() {
@@ -527,6 +616,37 @@ class LessonRepository(private val context: Context) {
                             alternatives = alternatives
                         ))
                     }
+                    "fill_blank" -> {
+                        exercisesList.add(ExerciseItem.FillBlank(
+                            sentence = eObj.optString("sentence", ""),
+                            answer = eObj.optString("answer", ""),
+                            acceptedAnswers = jsonArrayToStringList(eObj.optJSONArray("accepted")),
+                            options = jsonArrayToStringList(eObj.optJSONArray("options")),
+                            hint = eObj.optString("hint", ""),
+                            explanation = explanation
+                        ))
+                    }
+                    "matching" -> {
+                        val pairsArray = eObj.optJSONArray("pairs") ?: JSONArray()
+                        val pairs = mutableListOf<Pair<String, String>>()
+                        for (k in 0 until pairsArray.length()) {
+                            val po = pairsArray.optJSONObject(k) ?: continue
+                            pairs.add(po.optString("left", "") to po.optString("right", ""))
+                        }
+                        exercisesList.add(ExerciseItem.Matching(
+                            instruction = eObj.optString("instruction", "طابق بين العناصر:"),
+                            pairs = pairs,
+                            explanation = explanation
+                        ))
+                    }
+                    "short_answer" -> {
+                        exercisesList.add(ExerciseItem.ShortAnswer(
+                            question = eObj.optString("question", ""),
+                            answer = eObj.optString("answer", ""),
+                            strict = eObj.optBoolean("strict", false),
+                            explanation = explanation
+                        ))
+                    }
                 }
             }
 
@@ -624,7 +744,17 @@ class LessonRepository(private val context: Context) {
         "exam-s2-general-assessment.json"
     )
 
-    fun getStandardExams(): List<ExamData> {
+    private val standardExamsCache: List<ExamData> by lazy { readStandardExams() }
+    private val localExamsCache: List<ExamData> by lazy { readLocalExams() }
+    private val allExamsCache: List<ExamData> by lazy {
+        val localIds = localExamsCache.map { it.id }.toSet()
+        standardExamsCache.filter { !localIds.contains(it.id) } + localExamsCache
+    }
+
+    // Exams are static assets: they are parsed once and cached, not on every call.
+    fun getStandardExams(): List<ExamData> = standardExamsCache
+
+    private fun readStandardExams(): List<ExamData> {
         return examAssetFiles.mapNotNull { filename ->
             try {
                 val jsonString = context.assets.open(filename).bufferedReader().use { it.readText() }
@@ -636,7 +766,9 @@ class LessonRepository(private val context: Context) {
         }
     }
 
-    fun getLocalExams(): List<ExamData> {
+    fun getLocalExams(): List<ExamData> = localExamsCache
+
+    private fun readLocalExams(): List<ExamData> {
         val list = try {
             val jsonString = context.assets.open("local-exams-models.json").bufferedReader().use { it.readText() }
             val root = JSONObject(jsonString)
@@ -668,28 +800,14 @@ class LessonRepository(private val context: Context) {
         }
     }
 
-    fun getAllExams(): List<ExamData> {
-        val standard = getStandardExams()
-        val local = getLocalExams()
-        val localIds = local.map { it.id }.toSet()
-        val filteredStandard = standard.filter { !localIds.contains(it.id) }
-        return filteredStandard + local
-    }
+    fun getAllExams(): List<ExamData> = allExamsCache
 
     fun getExamById(examId: String): ExamData? {
         return getAllExams().firstOrNull { it.id == examId }
             ?: getHomeworkExam()
     }
 
-    fun getHomeworkExam(): ExamData? {
-        return try {
-            val jsonString = context.assets.open("exam-s1-homework-1.json").bufferedReader().use { it.readText() }
-            parseExamJson(jsonString)
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
-    }
+    fun getHomeworkExam(): ExamData? = standardExamsCache.firstOrNull { it.id == "exam-s1-homework-1" }
 
     private fun parseExamJson(jsonString: String): ExamData {
         return parseExamJsonObject(JSONObject(jsonString))
@@ -893,25 +1011,49 @@ class LessonRepository(private val context: Context) {
     }
 
     // IMPORTANT: this init block must stay at the END of the class body.
-    // Kotlin initializes properties and init blocks in textual order, and
-    // loadMistakes()/loadExamHistory() use properties declared above this point.
+    // Kotlin initializes properties and init blocks in textual order, and the loaders
+    // use properties declared above this point.
     init {
+        // Cheap SharedPreferences reads stay on the calling thread so settings (e.g. dark mode)
+        // are right from the first frame.
         try {
-            loadAllData()
+            loadLightData()
         } catch (e: Exception) {
             e.printStackTrace()
             // Corrupted/incompatible old SharedPreferences: reset and retry once.
             try { prefs.edit().clear().commit() } catch (_: Exception) {}
-            try { loadAllData() } catch (e2: Exception) { e2.printStackTrace() }
+            try { loadLightData() } catch (e2: Exception) { e2.printStackTrace() }
+        }
+        // Parsing the lesson and exam JSON is heavy: do it off the main thread.
+        if (loadInBackground) {
+            loadScope.launch { loadHeavyData() }
+        } else {
+            loadHeavyData()
         }
     }
 
-    private fun loadAllData() {
+    private fun loadLightData() {
         cleanDeprecatedData()
         loadSettings()
         loadCompletedLessons()
-        loadLessons()
-        loadMistakes()
-        loadExamHistory()
+    }
+
+    private fun loadHeavyData() {
+        try {
+            // Warm the exam cache first so screens never parse exams on the main thread.
+            getAllExams()
+            loadLessons()
+            loadMistakes()
+            loadExamHistory()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            try { prefs.edit().clear().commit() } catch (_: Exception) {}
+            try {
+                loadLessons()
+                loadMistakes()
+                loadExamHistory()
+            } catch (e2: Exception) { e2.printStackTrace() }
+        }
+        _isLoaded.value = true
     }
 }

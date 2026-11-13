@@ -10,7 +10,14 @@ import com.example.data.UserSettings
 import com.example.model.CardItem
 import com.example.model.ComponentInfo
 import com.example.model.Lesson
+import com.example.model.ExamData
+import com.example.model.ExamGrade
 import com.example.util.ArabicAudioPlayer
+import com.example.util.ExamGrader
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import org.json.JSONObject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -37,6 +44,9 @@ class ArabicAppViewModel(application: Application) : AndroidViewModel(applicatio
     val audioPlayer = ArabicAudioPlayer(application)
 
     // Exam data & in-memory answers (strictly not saved in localStorage / SharedPreferences)
+    /** False until lessons and exams finish loading in the background. */
+    val isDataLoaded: StateFlow<Boolean> get() = repository.isLoaded
+
     val allExams: List<com.example.model.ExamData> get() = repository.getAllExams()
     val localExams: List<com.example.model.ExamData> get() = repository.getLocalExams()
     val standardExams: List<com.example.model.ExamData> get() = repository.getStandardExams()
@@ -70,16 +80,25 @@ class ArabicAppViewModel(application: Application) : AndroidViewModel(applicatio
         repository.lessons
     ) { examId, _ ->
         repository.getExamById(examId)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), repository.getHomeworkExam())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val examAnswers = androidx.compose.runtime.mutableStateMapOf<String, String>()
     val selectedExamTopics = androidx.compose.runtime.mutableStateMapOf<String, String>()
     val submittedExams = androidx.compose.runtime.mutableStateMapOf<String, Boolean>()
     val showCorrectionExams = androidx.compose.runtime.mutableStateMapOf<String, Boolean>()
-    var examValidationError by androidx.compose.runtime.mutableStateOf<String?>(null)
+    /** Exams the student has started (timer running / answers being written). */
+    val startedExams = androidx.compose.runtime.mutableStateMapOf<String, Boolean>()
+    /** Epoch millis at which a timed exam ends; 0 or absent for untimed exams. */
+    val examEndsAt = androidx.compose.runtime.mutableStateMapOf<String, Long>()
+    val examAutoSubmitted = androidx.compose.runtime.mutableStateMapOf<String, Boolean>()
+    /** Essay self-ratings. Key: "<examId>_<sectionId>_r<index>", value 0, 0.5 or 1. */
+    val examRatings = androidx.compose.runtime.mutableStateMapOf<String, Float>()
 
     val isExamSubmitted: Boolean
         get() = submittedExams[_selectedExamId.value] == true
+
+    val isExamStarted: Boolean
+        get() = startedExams[_selectedExamId.value] == true
 
     val showCorrectionModel: Boolean
         get() = showCorrectionExams[_selectedExamId.value] == true
@@ -140,12 +159,27 @@ class ArabicAppViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun openExercise(lessonId: String) {
+        _reviewSession.value = null
         _activeLessonId.value = lessonId
+        _activeScreen.value = ActiveScreen.EXERCISE_SESSION
+    }
+
+    /** A cross-lesson session made of the mistakes that are due for spaced review today. */
+    private val _reviewSession = MutableStateFlow<List<com.example.model.MistakeReviewItem>?>(null)
+    val reviewSession: StateFlow<List<com.example.model.MistakeReviewItem>?> = _reviewSession.asStateFlow()
+
+    fun getDueMistakesCount(): Int = repository.getDueMistakes().size
+
+    fun startReviewSession(maxItems: Int = 10) {
+        val due = repository.getDueMistakes().take(maxItems)
+        if (due.isEmpty()) return
+        _reviewSession.value = due
         _activeScreen.value = ActiveScreen.EXERCISE_SESSION
     }
 
     fun navigateBackToTabs() {
         audioPlayer.stop()
+        _reviewSession.value = null
         _activeScreen.value = ActiveScreen.TABS
     }
 
@@ -230,15 +264,138 @@ class ArabicAppViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun openExam(examId: String = "exam-s1-homework-1") {
         _selectedExamId.value = examId
-        examValidationError = null
+        restoreExamSession(examId)
         _activeScreen.value = ActiveScreen.EXAM_VIEW
+        // A timed exam whose time ran out while the app was closed is submitted now.
+        val ends = examEndsAt[examId] ?: 0L
+        if (startedExams[examId] == true && submittedExams[examId] != true &&
+            ends > 0L && System.currentTimeMillis() >= ends
+        ) {
+            submitExam(auto = true)
+        }
     }
+
+    private fun answersFor(examId: String): Map<String, String> {
+        val prefix = "${examId}_"
+        return examAnswers.toMap().filterKeys { it.startsWith(prefix) }
+    }
+
+    private fun ratingsFor(examId: String): Map<String, Float> {
+        val prefix = "${examId}_"
+        return examRatings.toMap().filterKeys { it.startsWith(prefix) }
+    }
+
+    private fun clearExamState(examId: String) {
+        val prefix = "${examId}_"
+        examAnswers.keys.filter { it.startsWith(prefix) }.forEach { examAnswers.remove(it) }
+        selectedExamTopics.keys.filter { it.startsWith(prefix) }.forEach { selectedExamTopics.remove(it) }
+        examRatings.keys.filter { it.startsWith(prefix) }.forEach { examRatings.remove(it) }
+        startedExams.remove(examId)
+        examEndsAt.remove(examId)
+        examAutoSubmitted.remove(examId)
+        submittedExams[examId] = false
+        showCorrectionExams[examId] = false
+    }
+
+    /** Loads the saved session of [examId] (answers, timer end, submission state), if any. */
+    private fun restoreExamSession(examId: String) {
+        clearExamState(examId)
+        val session = repository.loadExamSession(examId) ?: return
+        try {
+            startedExams[examId] = session.optBoolean("started", false)
+            val ends = session.optLong("endsAt", 0L)
+            if (ends > 0L) examEndsAt[examId] = ends
+            val submitted = session.optBoolean("submitted", false)
+            submittedExams[examId] = submitted
+            showCorrectionExams[examId] = submitted
+            examAutoSubmitted[examId] = session.optBoolean("auto", false)
+            session.optJSONObject("answers")?.let { o ->
+                o.keys().forEach { k -> examAnswers[k] = o.optString(k, "") }
+            }
+            session.optJSONObject("topics")?.let { o ->
+                o.keys().forEach { k -> selectedExamTopics[k] = o.optString(k, "") }
+            }
+            session.optJSONObject("ratings")?.let { o ->
+                o.keys().forEach { k -> examRatings[k] = o.optDouble(k, 0.0).toFloat() }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            clearExamState(examId)
+        }
+    }
+
+    private fun persistExamSession(examId: String) {
+        val prefix = "${examId}_"
+        val session = JSONObject()
+        session.put("started", startedExams[examId] == true)
+        session.put("endsAt", examEndsAt[examId] ?: 0L)
+        session.put("submitted", submittedExams[examId] == true)
+        session.put("auto", examAutoSubmitted[examId] == true)
+        val answers = JSONObject()
+        examAnswers.toMap().forEach { (k, v) -> if (k.startsWith(prefix)) answers.put(k, v) }
+        session.put("answers", answers)
+        val topics = JSONObject()
+        selectedExamTopics.toMap().forEach { (k, v) -> if (k.startsWith(prefix)) topics.put(k, v) }
+        session.put("topics", topics)
+        val ratings = JSONObject()
+        examRatings.toMap().forEach { (k, v) -> if (k.startsWith(prefix)) ratings.put(k, v.toDouble()) }
+        session.put("ratings", ratings)
+        repository.saveExamSession(examId, session)
+    }
+
+    private var persistJob: Job? = null
+
+    private fun schedulePersist() {
+        persistJob?.cancel()
+        val examId = _selectedExamId.value
+        persistJob = viewModelScope.launch {
+            delay(500L)
+            persistExamSession(examId)
+        }
+    }
+
+    /** Starts the selected exam: the timer begins and cannot be paused or reset. */
+    fun startExam() {
+        val examId = _selectedExamId.value
+        val exam = repository.getExamById(examId) ?: return
+        clearExamState(examId)
+        startedExams[examId] = true
+        val seconds = ExamGrader.durationSeconds(exam.duration)
+        if (seconds != null) examEndsAt[examId] = System.currentTimeMillis() + seconds * 1000L
+        persistExamSession(examId)
+    }
+
+    /** Number of questions (and the essay) the student left empty. */
+    fun unansweredCount(exam: ExamData): Int {
+        var count = 0
+        for (section in exam.sections) {
+            for (q in section.questions) {
+                val ans = examAnswers["${exam.id}_${section.id}_q${q.no}"].orEmpty()
+                if (ans.replace(ExamGrader.CELL_SEPARATOR, "").isBlank()) count++
+            }
+            if (section.id == "C" || section.topic != null || section.topics.isNotEmpty()) {
+                if (examAnswers["${exam.id}_${section.id}_writing"].orEmpty().isBlank()) count++
+            }
+        }
+        return count
+    }
+
+    fun gradeCurrentExam(): ExamGrade? {
+        val exam = repository.getExamById(_selectedExamId.value) ?: return null
+        return ExamGrader.gradeExam(exam, answersFor(exam.id), ratingsFor(exam.id))
+    }
+
+    fun setRubricRating(sectionId: String, index: Int, rating: Float) {
+        val examId = _selectedExamId.value
+        examRatings["${examId}_${sectionId}_r$index"] = rating
+        persistExamSession(examId)
+        gradeCurrentExam()?.let { repository.updateLatestExamScore(examId, it.total) }
+    }
+
 
     fun selectExamTopic(examId: String, sectionId: String, topicId: String) {
         selectedExamTopics["${examId}_${sectionId}"] = topicId
-        if (examValidationError != null) {
-            examValidationError = null
-        }
+        schedulePersist()
     }
 
     fun getSelectedExamTopic(examId: String, sectionId: String): String? {
@@ -247,55 +404,23 @@ class ArabicAppViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun updateExamAnswer(key: String, text: String) {
         examAnswers[key] = text
-        if (examValidationError != null) {
-            examValidationError = null
-        }
+        schedulePersist()
     }
 
-    fun validateExamSubmission(): String? {
-        val exam = repository.getExamById(_selectedExamId.value) ?: return null
-        for (section in exam.sections) {
-            for (q in section.questions) {
-                val key = "${exam.id}_${section.id}_q${q.no}"
-                val ans = examAnswers[key]
-                if (ans.isNullOrBlank()) {
-                    return "يرجى الإجابة عن السؤال ${q.no} في «${section.title}» قبل تسليم الامتحان."
-                }
-            }
-            if (section.id == "C" || section.topic != null || section.topics.isNotEmpty()) {
-                if (section.chooseOne) {
-                    val chosen = getSelectedExamTopic(exam.id, section.id)
-                    if (chosen.isNullOrBlank()) {
-                        return "يرجى اختيار أحد الموضوعين في «${section.title}» قبل تسليم الامتحان."
-                    }
-                }
-                val writingKey = "${exam.id}_${section.id}_writing"
-                val ans = examAnswers[writingKey]
-                if (ans.isNullOrBlank()) {
-                    return "يرجى كتابة موضوع الإنشاء في «${section.title}» قبل تسليم الامتحان."
-                }
-            }
-        }
-        return null
-    }
 
-    fun submitExam(): Boolean {
-        val error = validateExamSubmission()
+    /** Submits the selected exam and grades it. Unanswered questions simply score zero. */
+    fun submitExam(auto: Boolean = false): Boolean {
         val examId = _selectedExamId.value
-        if (error != null) {
-            examValidationError = error
-            submittedExams[examId] = false
-            showCorrectionExams[examId] = false
-            return false
-        }
-        examValidationError = null
+        val exam = repository.getExamById(examId) ?: return false
+        if (submittedExams[examId] == true) return true
+        persistJob?.cancel()
+        startedExams[examId] = true
         submittedExams[examId] = true
         showCorrectionExams[examId] = true
-
-        val examObj = repository.getExamById(examId)
-        val title = examObj?.title ?: examId
-        val total = examObj?.declaredTotal ?: 20
-        repository.recordExamSubmission(examId, title, total)
+        examAutoSubmitted[examId] = auto
+        persistExamSession(examId)
+        val grade = ExamGrader.gradeExam(exam, answersFor(examId), ratingsFor(examId))
+        repository.recordExamSubmission(examId, exam.title, exam.declaredTotal, grade.total)
         return true
     }
 
@@ -329,14 +454,9 @@ class ArabicAppViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun resetExam() {
         val examId = _selectedExamId.value
-        val prefix = "${examId}_"
-        val keysToRemove = examAnswers.keys.filter { it.startsWith(prefix) }
-        keysToRemove.forEach { examAnswers.remove(it) }
-        val topicKeysToRemove = selectedExamTopics.keys.filter { it.startsWith(prefix) }
-        topicKeysToRemove.forEach { selectedExamTopics.remove(it) }
-        submittedExams[examId] = false
-        showCorrectionExams[examId] = false
-        examValidationError = null
+        persistJob?.cancel()
+        clearExamState(examId)
+        repository.clearExamSession(examId)
     }
 
     override fun onCleared() {

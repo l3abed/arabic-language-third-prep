@@ -34,6 +34,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -42,6 +43,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -76,12 +78,17 @@ fun LessonsListScreen(
     val settings by viewModel.settings.collectAsState()
     val componentInfos by viewModel.componentInfos.collectAsState()
 
-    val filteredLessons = remember(lessons, selectedUnit, selectedComponentId) {
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    val searchKey = com.example.util.ArabicMatcher.norm(searchQuery)
+
+    val filteredLessons = remember(lessons, selectedUnit, selectedComponentId, searchKey) {
         lessons
             .filter { lesson ->
                 val matchesUnit = (selectedUnit == null || lesson.unit == selectedUnit)
                 val matchesComponent = (selectedComponentId == null || lesson.component == selectedComponentId)
-                matchesUnit && matchesComponent
+                val matchesSearch = searchKey.isEmpty() ||
+                    com.example.util.ArabicMatcher.norm(lesson.title + " " + lesson.summary).contains(searchKey)
+                matchesUnit && matchesComponent && matchesSearch
             }
             .sortedWith(compareBy({ it.unit }, { it.component }, { it.order }))
     }
@@ -100,6 +107,23 @@ fun LessonsListScreen(
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground,
             fontSize = 24.sp
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("lesson_search_field"),
+            placeholder = { Text("ابحث عن درس بعنوانه أو محتواه") },
+            shape = RoundedCornerShape(14.dp),
+            textStyle = androidx.compose.ui.text.TextStyle(
+                textDirection = androidx.compose.ui.text.style.TextDirection.Rtl,
+                fontFamily = AmiriFontFamily,
+                fontSize = 16.sp
+            )
         )
         Spacer(modifier = Modifier.height(12.dp))
 

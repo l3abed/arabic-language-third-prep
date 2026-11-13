@@ -186,6 +186,49 @@ sealed class ExerciseItem {
         override val type: String = "order_words"
         override val prompt: String = "رتّب الكلمات لتكوين جملة سليمة:"
     }
+
+    /** Complete the sentence: the blank is written "____" in [sentence]. */
+    data class FillBlank(
+        val sentence: String,
+        val answer: String,
+        val acceptedAnswers: List<String> = emptyList(),
+        /** Optional word bank; when empty the learner types the answer. */
+        val options: List<String> = emptyList(),
+        val hint: String = "",
+        override val explanation: String
+    ) : ExerciseItem() {
+        fun isCorrect(student: String): Boolean {
+            val s = com.example.util.ArabicMatcher.norm(student)
+            return s.isNotEmpty() && (listOf(answer) + acceptedAnswers).any { com.example.util.ArabicMatcher.norm(it) == s }
+        }
+
+        override val type: String = "fill_blank"
+        override val prompt: String = sentence
+    }
+
+    /** Match each left item with its right item. [pairs] holds the correct pairs. */
+    data class Matching(
+        val instruction: String,
+        val pairs: List<Pair<String, String>>,
+        override val explanation: String
+    ) : ExerciseItem() {
+        override val type: String = "matching"
+        override val prompt: String = instruction
+    }
+
+    /** A short typed answer checked by keywords (e.g. a brief i'rab). */
+    data class ShortAnswer(
+        val question: String,
+        val answer: String,
+        val strict: Boolean = false,
+        override val explanation: String
+    ) : ExerciseItem() {
+        fun score(student: String): Double =
+            com.example.util.ArabicMatcher.itemScore(student, answer, strict)
+
+        override val type: String = "short_answer"
+        override val prompt: String = question
+    }
 }
 
 data class ComponentInfo(
@@ -209,8 +252,14 @@ data class MistakeReviewItem(
     val errorCount: Int,
     val lastErrorTimestamp: Long,
     val lessonTitle: String = "",
-    val exercise: ExerciseItem? = null
-)
+    val exercise: ExerciseItem? = null,
+    /** Leitner box (0..4): how many successful spaced reviews in a row. */
+    val box: Int = 0,
+    /** Epoch millis from which the question is due for review (0 = due now). */
+    val dueAt: Long = 0L
+) {
+    fun isDue(now: Long): Boolean = dueAt <= now
+}
 
 /**
  * Record of a completed exam submission.
@@ -219,5 +268,7 @@ data class ExamHistoryRecord(
     val examId: String,
     val examTitle: String,
     val timestamp: Long,
-    val declaredTotal: Int
+    val declaredTotal: Int,
+    /** Estimated score out of [declaredTotal]; negative when unknown (old records). */
+    val score: Double = -1.0
 )
