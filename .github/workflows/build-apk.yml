@@ -10,6 +10,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: Build & Package APK
@@ -28,23 +32,29 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Setup Keystore
+      # Prefer a private upload key (set the KEYSTORE_BASE64, STORE_PASSWORD, KEY_ALIAS and
+      # KEY_PASSWORD secrets). Without them the project's stable keystore is used so releases
+      # remain installable over previous builds.
+      - name: Setup signing keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          SECRET_STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          SECRET_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          SECRET_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          if [ -f debug.keystore.base64 ]; then
-            echo "Decoding debug.keystore.base64..."
-            base64 -d debug.keystore.base64 > debug.keystore
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "Signing with the private upload key from repository secrets."
+            printf '%s' "$KEYSTORE_BASE64" | base64 -d > release.keystore
+            {
+              echo "KEYSTORE_PATH=$PWD/release.keystore"
+              echo "STORE_PASSWORD=$SECRET_STORE_PASSWORD"
+              echo "KEY_ALIAS=$SECRET_KEY_ALIAS"
+              echo "KEY_PASSWORD=$SECRET_KEY_PASSWORD"
+            } >> "$GITHUB_ENV"
           else
-            echo "::warning::debug.keystore.base64 is missing: a NEW random signing key is generated, so this APK cannot be installed over a previous build. Commit debug.keystore.base64 to keep one stable key."
-            echo "Generating new debug keystore..."
-            keytool -genkeypair -v \
-              -keystore debug.keystore \
-              -storepass android -keypass android \
-              -alias androiddebugkey \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -dname "CN=Android Debug,O=Android,C=US"
+            echo "::notice::No KEYSTORE_BASE64 secret found; signing with the project's stable keystore."
+            base64 -d debug.keystore.base64 > debug.keystore
           fi
-          mkdir -p app
-          cp debug.keystore app/debug.keystore 2>/dev/null || true
 
       - name: Ensure gradlew is executable
         run: |
@@ -57,29 +67,32 @@ jobs:
             chmod +x gradlew
           fi
 
-      - name: Run unit tests (non-blocking)
-        continue-on-error: true
+      - name: Run unit tests
         run: ./gradlew testDebugUnitTest --stacktrace
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace
+      - name: Build Release APK
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Rename APK for a stable download link
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/release/*.apk dist/arabic-language-third-prep.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          name: arabic-language-third-prep-apk
+          path: dist/arabic-language-third-prep.apk
           retention-days: 14
 
       - name: Publish GitHub Release
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
-        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG_NAME="build-${{ github.run_number }}"
           gh release create "$TAG_NAME" \
-            app/build/outputs/apk/debug/*.apk \
+            dist/arabic-language-third-prep.apk \
             --title "APK Build #${{ github.run_number }}" \
             --generate-notes \
-            --target "$GITHUB_SHA" || echo "Release creation skipped or failed, APK is preserved in Artifacts"
+            --target "$GITHUB_SHA"
