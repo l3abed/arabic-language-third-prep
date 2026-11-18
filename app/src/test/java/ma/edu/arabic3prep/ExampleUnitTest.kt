@@ -373,4 +373,81 @@ class ExampleUnitTest {
             )
         }
     }
+
+    /**
+     * 7) ضمان جودة صياغة الأسئلة في كل نماذج الامتحانات (الامتحانات المقررة + المحلية + الجهوية):
+     * - لا يجوز أن يحيل أي سؤال إلى تنسيق بصري غير موجود في التطبيق
+     *   (كلمة تحتها خط / بخط مضغوط / بخط بارز / مسطّر تحته...).
+     * - كل سؤال يذكر «الجدول» يجب أن يكون مرفوقاً بجدول فعلي له رؤوس وأسطر.
+     */
+    @Test
+    fun testExamQuestionsHaveNoDanglingFormattingReferences() {
+        val examFiles = listOf(
+            "exam-s1-general-assessment.json",
+            "exam-s1-homework-1.json",
+            "exam-s1-unit1-assessment.json",
+            "exam-s1-unit2-assessment.json",
+            "exam-s1-unit3-assessment.json",
+            "exam-s2-general-assessment.json",
+            "exam-s2-unit4-assessment.json",
+            "exam-s2-unit5-assessment.json",
+            "exam-s2-unit6-assessment.json",
+            "local-exams-models.json",
+            "regional-exams-models.json"
+        )
+        val forbidden = listOf(
+            "تحتها خط", "تحته خط", "تحتها سطر", "تحته سطر",
+            "بخط مضغوط", "بخط بارز", "بخط تحت", "بخط",
+            "المكتوبة بخط", "المكتوبتين بخط", "المسطّر", "المسطر"
+        )
+
+        var checkedQuestions = 0
+        for (filename in examFiles) {
+            val root = JSONObject(getAssetFile(filename).readText())
+            val exams: List<JSONObject> =
+                if (root.has("exams")) {
+                    val arr = root.getJSONArray("exams")
+                    (0 until arr.length()).map { arr.getJSONObject(it) }
+                } else {
+                    listOf(root)
+                }
+
+            for (exam in exams) {
+                val examId = exam.optString("id", filename)
+                val sections = exam.optJSONArray("sections") ?: continue
+                for (s in 0 until sections.length()) {
+                    val section = sections.getJSONObject(s)
+                    val questions = section.optJSONArray("questions") ?: continue
+                    for (qi in 0 until questions.length()) {
+                        val question = questions.getJSONObject(qi)
+                        val prompt = question.optString("prompt", "")
+                        checkedQuestions++
+
+                        val hit = forbidden.firstOrNull { prompt.contains(it) }
+                        assertTrue(
+                            "السؤال رقم ${question.optString("no")} في $examId/${
+                                section.optString("id")
+                            } يحيل إلى تنسيق غير موجود في التطبيق: «$hit»\nالنص: $prompt",
+                            hit == null
+                        )
+
+                        if (prompt.contains("الجدول") || prompt.contains("جدول")) {
+                            val table = question.optJSONObject("table")
+                            val headers = table?.optJSONArray("headers")
+                            val rows = table?.optJSONArray("rows")
+                            assertTrue(
+                                "السؤال رقم ${question.optString("no")} في $examId/${
+                                    section.optString("id")
+                                } يذكر «الجدول» دون جدول فعلي: $prompt",
+                                table != null && headers != null && headers.length() > 0 &&
+                                    rows != null && rows.length() > 0
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        assertTrue("لم يتم فحص أي سؤال، تحقق من ملفات الأصول", checkedQuestions > 0)
+    }
 }
