@@ -72,7 +72,6 @@ import ma.edu.arabic3prep.ui.theme.TextMutedLight
 import ma.edu.arabic3prep.ui.theme.TextSecondaryLight
 import ma.edu.arabic3prep.util.TextHelper
 import ma.edu.arabic3prep.viewmodel.ArabicAppViewModel
-import org.json.JSONArray
 import org.json.JSONObject
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -132,52 +131,28 @@ fun ExerciseScreen(
     val exercise = exercises.getOrNull(questionIndex)
     val totalQuestions = exercises.size
 
-    // An interrupted exercise set resumes where it stopped. Cross-lesson review sessions are
-    // transient and are never persisted.
+    // An interrupted exercise set resumes at the same question with the score already earned.
+    // Cross-lesson review sessions are transient and are never persisted.
     val persistSession = review == null && lesson != null
     LaunchedEffect(sessionId) {
         if (!persistSession) return@LaunchedEffect
         val saved = viewModel.repository.loadExerciseSession(sessionId) ?: return@LaunchedEffect
         questionIndex = saved.optInt("q", 0).coerceIn(0, (totalQuestions - 1).coerceAtLeast(0))
         score = saved.optInt("score", 0)
-        isQuizCompleted = saved.optBoolean("done", false)
-        isAnswerSubmitted = saved.optBoolean("submitted", false)
-        isAnswerCorrect = saved.optBoolean("correct", false)
-        if (saved.has("option") && !saved.isNull("option")) selectedOptionIndex = saved.optInt("option")
-        if (saved.has("bool") && !saved.isNull("bool")) selectedBoolAnswer = saved.optBoolean("bool")
-        fillText = saved.optString("fill", "")
-        shortText = saved.optString("short", "")
-        saved.optJSONArray("ordered")?.let { arr ->
-            orderedWords.clear()
-            for (i in 0 until arr.length()) orderedWords.add(arr.getString(i))
-        }
-        saved.optJSONObject("match")?.let { obj ->
-            matchSelections = obj.keys().asSequence().associateWith { obj.optString(it, "") }
-        }
     }
 
-    LaunchedEffect(
-        sessionId, questionIndex, score, isQuizCompleted, isAnswerSubmitted, isAnswerCorrect,
-        selectedOptionIndex, selectedBoolAnswer, fillText, shortText, matchSelections,
-        orderedWords.toList()
-    ) {
+    LaunchedEffect(sessionId, questionIndex, score, isQuizCompleted, isAnswerSubmitted, isAnswerCorrect) {
         if (!persistSession) return@LaunchedEffect
         if (isQuizCompleted) {
             viewModel.repository.clearExerciseSession(sessionId)
             return@LaunchedEffect
         }
+        // The current question is stored as unanswered, so its point is excluded from the saved
+        // score; otherwise answering it again after resuming would count twice.
+        val earnedHere = if (isAnswerSubmitted && isAnswerCorrect) 1 else 0
         val session = JSONObject()
         session.put("q", questionIndex)
-        session.put("score", score)
-        session.put("done", isQuizCompleted)
-        session.put("submitted", isAnswerSubmitted)
-        session.put("correct", isAnswerCorrect)
-        session.put("option", selectedOptionIndex ?: JSONObject.NULL)
-        session.put("bool", selectedBoolAnswer ?: JSONObject.NULL)
-        session.put("fill", fillText)
-        session.put("short", shortText)
-        session.put("ordered", JSONArray(orderedWords.toList()))
-        session.put("match", JSONObject(matchSelections))
+        session.put("score", (score - earnedHere).coerceAtLeast(0))
         viewModel.repository.saveExerciseSession(sessionId, session)
     }
 
