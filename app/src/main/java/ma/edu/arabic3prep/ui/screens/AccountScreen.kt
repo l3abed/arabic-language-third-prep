@@ -1,5 +1,8 @@
 package ma.edu.arabic3prep.ui.screens
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -21,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.DeleteOutline
@@ -28,6 +32,7 @@ import androidx.compose.material.icons.outlined.FormatSize
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.RestartAlt
+import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.Spellcheck
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -74,6 +79,8 @@ fun AccountScreen(
     val lessons by viewModel.lessons.collectAsStateWithLifecycle()
 
     var showResetConfirmDialog by remember { mutableStateOf(false) }
+    var showImportConfirmDialog by remember { mutableStateOf(false) }
+    var importText by remember { mutableStateOf("") }
 
     val mistakeReviewItems by viewModel.mistakeReviewItems.collectAsStateWithLifecycle()
     val examHistory by viewModel.examHistory.collectAsStateWithLifecycle()
@@ -414,6 +421,80 @@ fun AccountScreen(
             }
         }
 
+        // Section: Backup & Restore
+        item {
+            Text(
+                text = "النسخ الاحتياطي والاستعادة",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+        }
+
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedButton(
+                    onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(
+                            ClipData.newPlainText("arabic3prep-progress", viewModel.repository.exportProgressJson())
+                        )
+                        Toast.makeText(context, "تم نسخ نسخة احتياطية إلى الحافظة", Toast.LENGTH_LONG).show()
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                        .testTag("export_progress_button"),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Backup,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = "تصدير", fontWeight = FontWeight.Bold)
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val text = clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
+                        if (text.isBlank()) {
+                            Toast.makeText(context, "الحافظة فارغة، انسخ نسخة احتياطية أولاً", Toast.LENGTH_LONG).show()
+                        } else {
+                            importText = text
+                            showImportConfirmDialog = true
+                        }
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                        .testTag("import_progress_button"),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Restore,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = "استيراد", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        item {
+            Text(
+                text = "ينسخ التصدير دروسك المكتملة ونتائجك إلى الحافظة لحفظها أو مشاركتها، ويستعيد الاستيراد نسخة منها.",
+                fontSize = 12.sp,
+                color = TextSecondaryLight
+            )
+        }
+
         // Reset Progress
         item {
             OutlinedButton(
@@ -486,6 +567,35 @@ fun AccountScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showClearExamHistoryDialog = false }) {
+                    Text("إلغاء")
+                }
+            }
+        )
+    }
+
+    // Import Progress Confirmation Dialog
+    if (showImportConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showImportConfirmDialog = false },
+            title = { Text(text = "تأكيد استعادة النسخة الاحتياطية", fontWeight = FontWeight.Bold) },
+            text = { Text("سيستبدل هذا تقدّمك الحالي بالبيانات الموجودة في الحافظة. هل تريد المتابعة؟") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val ok = viewModel.repository.importProgressJson(importText)
+                        showImportConfirmDialog = false
+                        Toast.makeText(
+                            context,
+                            if (ok) "تمت استعادة التقدّم بنجاح" else "تعذّر الاستيراد: النص غير صالح",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                ) {
+                    Text("نعم، استعادة", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showImportConfirmDialog = false }) {
                     Text("إلغاء")
                 }
             }

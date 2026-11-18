@@ -456,9 +456,91 @@ class LessonRepository(
         prefs.edit().remove("exam_session_$examId").apply()
     }
 
+    // ---- Exercise sessions (so an interrupted exercise set resumes where it stopped) ----
+    fun loadExerciseSession(sessionId: String): JSONObject? {
+        val raw = prefs.getString("exercise_session_$sessionId", null) ?: return null
+        return try { JSONObject(raw) } catch (e: Exception) { null }
+    }
+
+    fun saveExerciseSession(sessionId: String, session: JSONObject) {
+        prefs.edit().putString("exercise_session_$sessionId", session.toString()).apply()
+    }
+
+    fun clearExerciseSession(sessionId: String) {
+        prefs.edit().remove("exercise_session_$sessionId").apply()
+    }
+
     fun clearExamHistory() {
         prefs.edit().remove("exam_history_json").apply()
         _examHistory.value = emptyList()
+    }
+
+    // ---- Progress export / import (backup and transfer between devices) ----
+
+    /**
+     * Serialises everything the learner has saved (completed lessons, exercise scores, spaced-review
+     * mistakes, exam history and in-progress exam sessions) into a single JSON document.
+     */
+    fun exportProgressJson(): String {
+        val data = JSONObject()
+        prefs.all.forEach { (key, value) ->
+            val entry = JSONObject()
+            when (value) {
+                is String -> { entry.put("t", "s"); entry.put("v", value) }
+                is Int -> { entry.put("t", "i"); entry.put("v", value) }
+                is Long -> { entry.put("t", "l"); entry.put("v", value) }
+                is Float -> { entry.put("t", "f"); entry.put("v", value.toDouble()) }
+                is Boolean -> { entry.put("t", "b"); entry.put("v", value) }
+                is Set<*> -> {
+                    entry.put("t", "ss")
+                    entry.put("v", JSONArray(value.map { it.toString() }))
+                }
+            }
+            if (entry.has("t")) data.put(key, entry)
+        }
+        return JSONObject().apply {
+            put("app", "arabic-language-third-prep")
+            put("version", 1)
+            put("exportedAt", System.currentTimeMillis())
+            put("data", data)
+        }.toString(2)
+    }
+
+    /**
+     * Restores a document produced by [exportProgressJson], replacing the current saved progress.
+     * Returns false when [json] is not a valid backup.
+     */
+    fun importProgressJson(json: String): Boolean {
+        return try {
+            val data = JSONObject(json).optJSONObject("data") ?: return false
+            val editor = prefs.edit().clear()
+            data.keys().forEach { key ->
+                val entry = data.getJSONObject(key)
+                when (entry.optString("t")) {
+                    "s" -> editor.putString(key, entry.getString("v"))
+                    "i" -> editor.putInt(key, entry.getInt("v"))
+                    "l" -> editor.putLong(key, entry.getLong("v"))
+                    "f" -> editor.putFloat(key, entry.getDouble("v").toFloat())
+                    "b" -> editor.putBoolean(key, entry.getBoolean("v"))
+                    "ss" -> {
+                        val arr = entry.getJSONArray("v")
+                        val set = mutableSetOf<String>()
+                        for (i in 0 until arr.length()) set.add(arr.getString(i))
+                        editor.putStringSet(key, set)
+                    }
+                }
+            }
+            editor.apply()
+            // Refresh the in-memory state so the UI reflects the restored data immediately.
+            loadSettings()
+            loadCompletedLessons()
+            loadMistakes()
+            loadExamHistory()
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
     }
 
     fun loadLessons() {
