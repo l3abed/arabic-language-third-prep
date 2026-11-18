@@ -824,9 +824,10 @@ class LessonRepository(
 
     private val standardExamsCache: List<ExamData> by lazy { readStandardExams() }
     private val localExamsCache: List<ExamData> by lazy { readLocalExams() }
+    private val regionalExamsCache: List<ExamData> by lazy { readRegionalExams() }
     private val allExamsCache: List<ExamData> by lazy {
-        val localIds = localExamsCache.map { it.id }.toSet()
-        standardExamsCache.filter { !localIds.contains(it.id) } + localExamsCache
+        val bundledIds = (localExamsCache + regionalExamsCache).map { it.id }.toSet()
+        standardExamsCache.filter { !bundledIds.contains(it.id) } + localExamsCache + regionalExamsCache
     }
 
     // Exams are static assets: they are parsed once and cached, not on every call.
@@ -870,6 +871,42 @@ class LessonRepository(
             "local-exam-ibn-battuta-2022-2023",  // 2022/2023
             "local-exam-tazart-2025-body-health", // 2025 (يناير)
             "local-exam-tanseefet-2025-hollywood" // 2025 (يناير)
+        )
+
+        return list.sortedBy { exam ->
+            val idx = chronologicalDateOrder.indexOf(exam.id)
+            if (idx >= 0) idx else 99
+        }
+    }
+
+    fun getRegionalExams(): List<ExamData> = regionalExamsCache
+
+    private fun readRegionalExams(): List<ExamData> {
+        val list = try {
+            val jsonString = context.assets.open("regional-exams-models.json").bufferedReader().use { it.readText() }
+            val root = JSONObject(jsonString)
+            val examsArray = root.optJSONArray("exams") ?: JSONArray()
+            val parsedList = mutableListOf<ExamData>()
+            for (i in 0 until examsArray.length()) {
+                val obj = examsArray.getJSONObject(i)
+                parsedList.add(parseExamJsonObject(obj))
+            }
+            parsedList
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
+        }
+
+        // Official chronological order (oldest session first).
+        val chronologicalDateOrder = listOf(
+            "regional-exam-marrakech-safi-2015",
+            "regional-exam-marrakech-safi-2016",
+            "regional-exam-marrakech-safi-2018",
+            "regional-exam-marrakech-safi-2021",
+            "regional-exam-marrakech-safi-2022",
+            "regional-exam-casablanca-settat-2024",
+            "regional-exam-laayoune-sakia-el-hamra-2025",
+            "regional-exam-casablanca-settat-2025"
         )
 
         return list.sortedBy { exam ->

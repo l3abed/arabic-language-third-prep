@@ -180,6 +180,16 @@ fun ExercisesOverviewScreen(
                         ),
                         shape = RoundedCornerShape(20.dp)
                     )
+                    FilterChip(
+                        selected = selectedExamCategory == "regional",
+                        onClick = { selectedExamCategory = if (selectedExamCategory == "regional") null else "regional" },
+                        label = { Text("الامتحانات الجهوية (${viewModel.regionalExams.size})", fontSize = 13.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = PrimaryDarkTeal,
+                            selectedLabelColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(20.dp)
+                    )
                 }
             }
         }
@@ -188,6 +198,7 @@ fun ExercisesOverviewScreen(
             "local" -> viewModel.localExams
             "assessments" -> viewModel.unitAssessments
             "homework" -> viewModel.homeworkExams
+            "regional" -> viewModel.regionalExams
             else -> allExams
         }
 

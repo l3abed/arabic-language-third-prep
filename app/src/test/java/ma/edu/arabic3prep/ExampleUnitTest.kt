@@ -295,4 +295,82 @@ class ExampleUnitTest {
             )
         }
     }
+
+    /**
+     * 6) التحقق من ملف الامتحانات الجهوية (regional-exams-models.json):
+     * - عدد الامتحانات 8 ومعرّفاتها غير مكررة.
+     * - declared_total = 20 ومجموع الأقسام = 20 ومجموع أسئلة كل قسم = نقطته.
+     * - مجموع معايير rubric في القسم C = نقط القسم C.
+     * - لكل امتحان نص انطلاق غير فارغ، ولكل سؤال في القسمين A و B إجابات نموذجية.
+     */
+    @Test
+    fun testRegionalExamsIntegrityAndAnswers() {
+        val file = getAssetFile("regional-exams-models.json")
+        val root = JSONObject(file.readText())
+        val examsArr = root.getJSONArray("exams")
+
+        assertEquals("يجب أن يحتوي ملف الامتحانات الجهوية على 8 امتحانات", 8, examsArr.length())
+
+        val seenIds = mutableSetOf<String>()
+        for (i in 0 until examsArr.length()) {
+            val exam = examsArr.getJSONObject(i)
+            val examId = exam.getString("id")
+            assertTrue("معرّف الامتحان الجهوي يجب أن يبدأ بـ regional-exam-: $examId",
+                examId.startsWith("regional-exam-"))
+            assertFalse("معرّف الامتحان الجهوي مكرر: $examId", seenIds.contains(examId))
+            seenIds.add(examId)
+
+            val passage = exam.getJSONObject("passage")
+            assertTrue("نص الانطلاق فارغ في $examId", passage.getString("text").trim().length > 100)
+
+            assertEquals("declared_total يجب أن يساوي 20 في $examId", 20, exam.getInt("declared_total"))
+
+            val sectionsArr = exam.getJSONArray("sections")
+            var sectionsSum = 0.0
+            for (s in 0 until sectionsArr.length()) {
+                val section = sectionsArr.getJSONObject(s)
+                val sectionId = section.getString("id")
+                val sectionPoints = section.getDouble("points")
+                sectionsSum += sectionPoints
+
+                val questionsArr = section.optJSONArray("questions")
+                if (questionsArr != null && questionsArr.length() > 0) {
+                    var qSum = 0.0
+                    for (q in 0 until questionsArr.length()) {
+                        val question = questionsArr.getJSONObject(q)
+                        qSum += question.getDouble("points")
+                        val answers = question.optJSONArray("answer_groups")
+                        assertTrue(
+                            "في الامتحان $examId القسم $sectionId السؤال ${q + 1}: لا توجد إجابات نموذجية",
+                            answers != null && answers.length() > 0
+                        )
+                    }
+                    assertEquals(
+                        "في الامتحان $examId القسم $sectionId: مجموع نقط الأسئلة ($qSum) يجب أن يساوي نقط القسم ($sectionPoints)",
+                        sectionPoints, qSum, 0.001
+                    )
+                }
+
+                if (sectionId == "C") {
+                    val rubricArr = section.optJSONArray("rubric")
+                    assertTrue("القسم C في $examId بلا سلم تنقيط", rubricArr != null && rubricArr.length() > 0)
+                    var rubricSum = 0.0
+                    for (r in 0 until rubricArr!!.length()) {
+                        rubricSum += rubricArr.getJSONObject(r).getDouble("points")
+                    }
+                    assertEquals(
+                        "في الامتحان $examId القسم C: مجموع معايير rubric ($rubricSum) يجب أن يساوي نقط القسم ($sectionPoints)",
+                        sectionPoints, rubricSum, 0.001
+                    )
+                    val topicsArr = section.optJSONArray("topics")
+                    assertTrue("القسم C في $examId بلا مواضيع", topicsArr != null && topicsArr.length() > 0)
+                }
+            }
+
+            assertEquals(
+                "في الامتحان $examId: مجموع نقط الأقسام ($sectionsSum) يجب أن يساوي declared_total",
+                20.0, sectionsSum, 0.001
+            )
+        }
+    }
 }

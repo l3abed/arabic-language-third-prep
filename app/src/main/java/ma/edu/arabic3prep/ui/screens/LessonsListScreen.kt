@@ -262,10 +262,12 @@ fun LessonsListScreen(
             var isLocalExpanded by remember { mutableStateOf(false) }
             var isAssessmentsExpanded by remember { mutableStateOf(false) }
             var isHomeworkExpanded by remember { mutableStateOf(false) }
+            var isRegionalExpanded by remember { mutableStateOf(false) }
 
             val localExams = viewModel.localExams
             val unitAssessments = viewModel.unitAssessments
             val homeworkExams = viewModel.homeworkExams
+            val regionalExams = viewModel.regionalExams
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -306,12 +308,17 @@ fun LessonsListScreen(
                                 isSelected = isHomeworkExpanded,
                                 onClick = { isHomeworkExpanded = !isHomeworkExpanded }
                             )
+                            FilterChipItem(
+                                label = "الامتحانات الجهوية (${regionalExams.size})",
+                                isSelected = isRegionalExpanded,
+                                onClick = { isRegionalExpanded = !isRegionalExpanded }
+                            )
                         }
                     }
                 }
 
                 // Initial instruction card when all are collapsed
-                if (!isLocalExpanded && !isAssessmentsExpanded && !isHomeworkExpanded) {
+                if (!isLocalExpanded && !isAssessmentsExpanded && !isHomeworkExpanded && !isRegionalExpanded) {
                     item {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -320,7 +327,7 @@ fun LessonsListScreen(
                             border = androidx.compose.foundation.BorderStroke(1.dp, GoldAccent.copy(alpha = 0.5f))
                         ) {
                             Text(
-                                text = "اضغط على زر الفئة المطلوبة أدناه (امتحانات محلية، أو تقويمات الوحدات الدراسية، أو الفروض المنزلية) لعرض نماذجها مع التصحيح الكامل.",
+                                text = "اضغط على زر الفئة المطلوبة أدناه (امتحانات محلية، أو تقويمات الوحدات الدراسية، أو الفروض المنزلية، أو الامتحانات الجهوية) لعرض نماذجها مع التصحيح الكامل.",
                                 fontSize = 13.sp,
                                 color = PrimaryDarkTeal,
                                 lineHeight = 20.sp,
@@ -387,6 +394,27 @@ fun LessonsListScreen(
 
                 if (isHomeworkExpanded) {
                     items(homeworkExams) { exam ->
+                        ExamItemCard(
+                            exam = exam,
+                            onOpenExam = { viewModel.openExam(exam.id) }
+                        )
+                    }
+                }
+
+                // 4. زر «الامتحانات الجهوية»
+                item {
+                    ExamCategoryHeaderButton(
+                        title = "الامتحانات الجهوية",
+                        subtitle = "امتحانات جهوية موحدة لدورات سابقة من جهات مختلفة مع عناصر الإجابة",
+                        count = regionalExams.size,
+                        isExpanded = isRegionalExpanded,
+                        onClick = { isRegionalExpanded = !isRegionalExpanded },
+                        testTag = "btn_category_regional_exams"
+                    )
+                }
+
+                if (isRegionalExpanded) {
+                    items(regionalExams) { exam ->
                         ExamItemCard(
                             exam = exam,
                             onOpenExam = { viewModel.openExam(exam.id) }

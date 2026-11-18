@@ -49,6 +49,7 @@ class ArabicAppViewModel(application: Application) : AndroidViewModel(applicatio
 
     val allExams: List<ma.edu.arabic3prep.model.ExamData> get() = repository.getAllExams()
     val localExams: List<ma.edu.arabic3prep.model.ExamData> get() = repository.getLocalExams()
+    val regionalExams: List<ma.edu.arabic3prep.model.ExamData> get() = repository.getRegionalExams()
     val standardExams: List<ma.edu.arabic3prep.model.ExamData> get() = repository.getStandardExams()
     val unitAssessments: List<ma.edu.arabic3prep.model.ExamData>
         get() {

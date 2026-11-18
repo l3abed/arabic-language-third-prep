@@ -504,6 +504,15 @@ fun HomeScreen(
                         onClick = { selectedExamCategory = "homework" }
                     )
                 }
+                item {
+                    ExamCategoryCard(
+                        title = "الامتحانات الجهوية",
+                        subtitle = "امتحانات جهوية موحدة لدورات سابقة من جهات مختلفة مع عناصر الإجابة",
+                        countText = "${viewModel.regionalExams.size} امتحانات",
+                        icon = Icons.Filled.School,
+                        onClick = { selectedExamCategory = "regional" }
+                    )
+                }
             } else {
                 // Regular Lesson Components: Display the 3 Units
                 items(unitsList.size) { index ->
@@ -573,6 +582,7 @@ fun HomeScreen(
                                 selectedExamCategory == "local" -> "امتحانات محلية موحدة"
                                 selectedExamCategory == "assessments" -> "تقويمات الوحدات الدراسية"
                                 selectedExamCategory == "homework" -> "الفروض المنزلية"
+                                selectedExamCategory == "regional" -> "الامتحانات الجهوية"
                                 selectedUnitNumber == 1 -> "الوحدة الأولى: القيم الإسلامية"
                                 selectedUnitNumber == 2 -> "الوحدة الثانية: القيم الوطنية والإنسانية"
                                 selectedUnitNumber == 3 -> "الوحدة الثالثة: المجال الحضاري"
@@ -604,6 +614,7 @@ fun HomeScreen(
                     "local" -> viewModel.localExams
                     "assessments" -> viewModel.unitAssessments
                     "homework" -> viewModel.homeworkExams
+                    "regional" -> viewModel.regionalExams
                     else -> emptyList()
                 }
 
